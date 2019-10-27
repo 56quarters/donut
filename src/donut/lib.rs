@@ -1,25 +1,28 @@
 use serde::Serialize;
 use std::net::ToSocketAddrs;
+use trust_dns::op::ResponseCode;
+use trust_dns::rr::{DNSClass, Name, RData, Record, RecordType};
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
 pub struct DohRequest {
     name: String,
-    kind: u32,
+    kind: u16,
     checking_disabled: bool,
     content_type: String,
     dnssec_ok: bool,
 }
 
 impl DohRequest {
-    pub fn new<S>(
-        name: S,
-        kind: u32,
+    pub fn new<S1, S2>(
+        name: S1,
+        kind: u16,
         checking_disabled: bool,
-        content_type: S,
+        content_type: S2,
         dnssec_ok: bool,
     ) -> Self
     where
-        S: Into<String>,
+        S1: Into<String>,
+        S2: Into<String>,
     {
         DohRequest {
             name: name.into(),
@@ -37,11 +40,11 @@ pub struct DohQuestion {
     name: String,
 
     #[serde(rename = "type")]
-    kind: u32,
+    kind: u16,
 }
 
 impl DohQuestion {
-    pub fn new<S>(name: S, kind: u32) -> Self
+    pub fn new<S>(name: S, kind: u16) -> Self
     where
         S: Into<String>,
     {
@@ -58,7 +61,7 @@ pub struct DohAnswer {
     name: String,
 
     #[serde(rename = "type")]
-    kind: u32,
+    kind: u16,
 
     #[serde(rename = "TTL")]
     ttl: u32,
@@ -68,9 +71,10 @@ pub struct DohAnswer {
 }
 
 impl DohAnswer {
-    pub fn new<S>(name: S, kind: u32, ttl: u32, data: S) -> Self
+    pub fn new<S1, S2>(name: S1, kind: u16, ttl: u32, data: S2) -> Self
     where
-        S: Into<String>,
+        S1: Into<String>,
+        S2: Into<String>,
     {
         DohAnswer {
             name: name.into(),
@@ -84,13 +88,13 @@ impl DohAnswer {
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
 pub struct DohResult {
     #[serde(rename = "Status")]
-    status: u32,
+    status: u16,
 
     #[serde(rename = "TC")]
     truncated: bool,
 
     #[serde(rename = "RD")]
-    recursive_desired: bool,
+    recursion_desired: bool,
 
     #[serde(rename = "RA")]
     recursion_available: bool,
@@ -110,9 +114,9 @@ pub struct DohResult {
 
 impl DohResult {
     pub fn new(
-        status: u32,
+        status: u16,
         truncated: bool,
-        recursive_desired: bool,
+        recursion_desired: bool,
         recursion_available: bool,
         all_validated: bool,
         checking_disabled: bool,
@@ -122,7 +126,7 @@ impl DohResult {
         DohResult {
             status,
             truncated,
-            recursive_desired,
+            recursion_desired,
             recursion_available,
             all_validated,
             checking_disabled,
@@ -133,9 +137,26 @@ impl DohResult {
 }
 
 pub fn lookup_from_system(request: &DohRequest) -> DohResult {
-    let addr = request.name.to_socket_addrs().unwrap().next().unwrap();
-    println!("Addr: {:?}", addr.ip().to_string());
-    DohResult::default()
+    let lookup = (&request.name as &str, 0u16);
+    let addr = lookup.to_socket_addrs().unwrap().next().unwrap();
+    let question = DohQuestion::new(&request.name, u16::from(RecordType::A));
+    let answer = DohAnswer::new(
+        &request.name,
+        u16::from(RecordType::A),
+        300,
+        addr.ip().to_string(),
+    );
+
+    DohResult::new(
+        u16::from(ResponseCode::NoError),
+        false,
+        true,
+        true,
+        false,
+        false,
+        vec![question],
+        vec![answer],
+    )
 }
 
 pub fn lookup_from_dns_udp(request: &DohRequest) -> DohResult {
