@@ -2,6 +2,7 @@ use hyper::header::CONTENT_TYPE;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use serde::Serialize;
+use std::net::ToSocketAddrs;
 
 struct DohRequest {
     name: String,
@@ -62,13 +63,33 @@ struct DohResult {
     answers: Vec<DohAnswer>,
 }
 
+fn lookup_from_system(request: &DohRequest) -> DohResult {
+    let addr = request.name.to_socket_addrs().unwrap().next().unwrap();
+    println!("Addr: {:?}", addr.ip().to_string());
+    DohResult::default()
+}
+
+fn lookup_from_dns_udp(request: &DohRequest) -> DohResult {
+    unimplemented!();
+}
+
+fn lookup_from_dns_tls(request: &DohRequest) -> DohResult {
+    unimplemented!();
+}
+
 async fn lookup(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     match (req.method(), req.uri().path()) {
-        // Serve some instructions at /
         (&Method::GET, "/") => {
-            let res = DohResult::default();
-            let body = serde_json::to_vec(&res).unwrap();
+            let params = DohRequest {
+                name: "example.com:0".to_owned(),
+                kind: 1,
+                checking_disabled: false,
+                content_type: "".to_owned(),
+                dnssec_ok: true,
+            };
 
+            let res = lookup_from_system(&params);
+            let body = serde_json::to_vec(&res).unwrap();
             let response = Response::builder()
                 .status(StatusCode::OK)
                 .header(CONTENT_TYPE, "application/json")
