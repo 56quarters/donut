@@ -165,6 +165,7 @@ dependencies = [
 name = "donut"
 version = "0.1.0"
 dependencies = [
+ "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper 0.13.0-alpha.4 (git+https://github.com/hyperium/hyper.git)",
  "serde 1.0.101 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.41 (registry+https://github.com/rust-lang/crates.io-index)",

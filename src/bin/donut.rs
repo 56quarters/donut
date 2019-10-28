@@ -1,15 +1,40 @@
-use donut::DohRequest;
+use donut::{DohRequest, UdpResolverBackend};
 use hyper::header::CONTENT_TYPE;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
-use serde::Serialize;
+
+use trust_dns::client::SyncClient;
+use trust_dns::udp::UdpClientConnection;
+
+fn new_udp_resolver(addr: &str) -> UdpResolverBackend {
+    let address = addr.parse().unwrap();
+    let conn = UdpClientConnection::new(address).unwrap();
+    let client = SyncClient::new(conn);
+    UdpResolverBackend::new(client)
+}
 
 async fn lookup(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => {
-            let params = DohRequest::new("example.com", 1, false, "".to_owned(), true);
-            let res = donut::lookup_from_system(&params);
-            let body = serde_json::to_vec(&res).unwrap();
+            let params = DohRequest::new("56quarters.xyz", 28, false, "".to_owned(), true);
+            let resolver = new_udp_resolver("127.0.0.1:53");
+
+            let res = match resolver.resolve(&params).await {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("ERROR: {}", e);
+                    return Ok(http_error_response(StatusCode::INTERNAL_SERVER_ERROR));
+                }
+            };
+
+            let body = match serde_json::to_vec(&res) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("ERROR: {}", e);
+                    return Ok(http_error_response(StatusCode::INTERNAL_SERVER_ERROR));
+                }
+            };
+
             let response = Response::builder()
                 .status(StatusCode::OK)
                 .header(CONTENT_TYPE, "application/json")
@@ -19,18 +44,17 @@ async fn lookup(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             Ok(response)
         }
 
-        (&Method::POST, _) => http_error_response(StatusCode::METHOD_NOT_ALLOWED),
+        (&Method::POST, _) => Ok(http_error_response(StatusCode::METHOD_NOT_ALLOWED)),
 
-        _ => http_error_response(StatusCode::NOT_FOUND),
+        _ => Ok(http_error_response(StatusCode::NOT_FOUND)),
     }
 }
 
-fn http_error_response(code: StatusCode) -> Result<Response<Body>, hyper::Error> {
-    let response = Response::builder()
+fn http_error_response(code: StatusCode) -> Response<Body> {
+    return Response::builder()
         .status(code)
         .body(Body::empty())
         .unwrap();
-    Ok(response)
 }
 
 #[tokio::main]
