@@ -1,11 +1,10 @@
 //
 //
 
+use crate::types::{DohAnswer, DohQuestion, DohRequest, DohResult, DonutResult};
 use trust_dns::client::{Client, SyncClient};
 use trust_dns::rr::{DNSClass, Name, RData, RecordType};
 use trust_dns::udp::UdpClientConnection;
-
-use crate::types::{DohAnswer, DohQuestion, DohRequest, DohResult, DonutResult};
 
 pub struct UdpResolverBackend {
     client: SyncClient<UdpClientConnection>,
@@ -55,5 +54,10 @@ impl UdpResolverBackend {
             vec![question],
             answers,
         ))
+    }
+}
+impl std::fmt::Debug for UdpResolverBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "UdpResolverBackend {{ ... }}")
     }
 }
