@@ -49,13 +49,7 @@ pub struct DohRequest {
 }
 
 impl DohRequest {
-    pub fn new<S1, S2>(
-        name: S1,
-        kind: u16,
-        checking_disabled: bool,
-        content_type: S2,
-        dnssec_ok: bool,
-    ) -> Self
+    pub fn new<S1, S2>(name: S1, kind: u16, checking_disabled: bool, content_type: S2, dnssec_ok: bool) -> Self
     where
         S1: Into<String>,
         S2: Into<String>,

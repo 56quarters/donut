@@ -4,10 +4,7 @@ use hyper::header::CONTENT_TYPE;
 use hyper::{Body, Method, Request, Response, StatusCode};
 use std::sync::Arc;
 
-pub async fn http_route(
-    req: Request<Body>,
-    resolver: Arc<UdpResolverBackend>,
-) -> Result<Response<Body>, hyper::Error> {
+pub async fn http_route(req: Request<Body>, dns: Arc<UdpResolverBackend>) -> Result<Response<Body>, hyper::Error> {
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => {
             let params = match get_request_from_params(&req) {
@@ -18,7 +15,7 @@ pub async fn http_route(
                 }
             };
 
-            let result = match resolver.resolve(&params).await {
+            let result = match dns.resolve(&params).await {
                 Ok(v) => v,
                 Err(e) => {
                     eprintln!("ERROR: {}", e);
@@ -54,8 +51,5 @@ fn get_request_from_params(req: &Request<Body>) -> DonutResult<DohRequest> {
 }
 
 fn http_error_no_body(code: StatusCode) -> Response<Body> {
-    Response::builder()
-        .status(code)
-        .body(Body::empty())
-        .unwrap()
+    Response::builder().status(code).body(Body::empty()).unwrap()
 }
