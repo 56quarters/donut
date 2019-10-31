@@ -19,6 +19,9 @@ pub enum DonutError {
 
     #[fail(display = "{}", _0)]
     DnsParseError(#[cause] DnsParseError),
+
+    #[fail(display = "invalid input")]
+    InvalidInput,
 }
 
 impl From<DnsClientError> for DonutError {
@@ -39,17 +42,23 @@ impl From<DnsProtoError> for DonutError {
     }
 }
 
+impl From<url::ParseError> for DonutError {
+    fn from(_e: url::ParseError) -> Self {
+        DonutError::InvalidInput
+    }
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
 pub struct DohRequest {
     pub name: String,
     pub kind: u16,
     pub checking_disabled: bool,
+    pub dnssec_data: bool,
     pub content_type: String,
-    pub dnssec_ok: bool,
 }
 
 impl DohRequest {
-    pub fn new<S1, S2>(name: S1, kind: u16, checking_disabled: bool, content_type: S2, dnssec_ok: bool) -> Self
+    pub fn new<S1, S2>(name: S1, kind: u16, checking_disabled: bool, dnssec_data: bool, content_type: S2) -> Self
     where
         S1: Into<String>,
         S2: Into<String>,
@@ -58,8 +67,8 @@ impl DohRequest {
             name: name.into(),
             kind,
             checking_disabled,
+            dnssec_data,
             content_type: content_type.into(),
-            dnssec_ok,
         }
     }
 }

@@ -1,8 +1,11 @@
-use crate::dns::UdpResolverBackend;
-use crate::types::{DohRequest, DonutResult};
+use crate::dns::{validate_kind, validate_name, UdpResolverBackend};
+use crate::types::{DohRequest, DonutError, DonutResult};
 use hyper::header::CONTENT_TYPE;
 use hyper::{Body, Method, Request, Response, StatusCode};
+use std::collections::HashMap;
 use std::sync::Arc;
+
+const DEFAULT_CONTENT_TYPE: &str = "application/dns-json";
 
 pub async fn http_route(req: Request<Body>, dns: Arc<UdpResolverBackend>) -> Result<Response<Body>, hyper::Error> {
     match (req.method(), req.uri().path()) {
@@ -47,7 +50,34 @@ pub async fn http_route(req: Request<Body>, dns: Arc<UdpResolverBackend>) -> Res
 }
 
 fn get_request_from_params(req: &Request<Body>) -> DonutResult<DohRequest> {
-    Ok(DohRequest::new("56quarters.xyz", 28, false, "".to_owned(), true))
+    let qs = req.uri().query().unwrap_or("").to_string();
+    let query = url::form_urlencoded::parse(qs.as_bytes());
+    let params: HashMap<String, String> = query.into_owned().collect();
+
+    let name = params
+        .get("name")
+        .ok_or_else(|| DonutError::InvalidInput)
+        .and_then(|s| validate_name(s))?;
+    let kind = params
+        .get("type")
+        .ok_or_else(|| DonutError::InvalidInput)
+        .and_then(|s| validate_kind(s))?;
+    let dnssec_data = params
+        .get("do")
+        .map(|s| (s == "1" || s.to_lowercase() == "true"))
+        .unwrap_or(false);
+    let checking_disabled = params
+        .get("cd")
+        .map(|s| (s == "1" || s.to_lowercase() == "true"))
+        .unwrap_or(false);
+
+    Ok(DohRequest::new(
+        name,
+        kind,
+        checking_disabled,
+        dnssec_data,
+        DEFAULT_CONTENT_TYPE,
+    ))
 }
 
 fn http_error_no_body(code: StatusCode) -> Response<Body> {

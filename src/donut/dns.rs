@@ -1,7 +1,7 @@
 //
 //
 
-use crate::types::{DohAnswer, DohQuestion, DohRequest, DohResult, DonutResult};
+use crate::types::{DohAnswer, DohQuestion, DohRequest, DohResult, DonutError, DonutResult};
 use trust_dns::client::{Client, SyncClient};
 use trust_dns::rr::{DNSClass, Name, RData, RecordType};
 use trust_dns::udp::UdpClientConnection;
@@ -60,4 +60,31 @@ impl std::fmt::Debug for UdpResolverBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, "UdpResolverBackend {{ ... }}")
     }
+}
+
+// TODO: Any validation. Does trust-dns do this?
+pub fn validate_name(name: &str) -> DonutResult<&str> {
+    Ok(name)
+}
+
+// TODO: Parsing the input twice, always
+pub fn validate_kind(kind: &str) -> DonutResult<u16> {
+    let type_from_number: Option<RecordType> =
+        kind.parse::<u16>()
+            .ok()
+            .map(|i| RecordType::from(i))
+            .and_then(|r| match r {
+                RecordType::Unknown(_) => None,
+                _ => Some(r),
+            });
+
+    let type_from_str: Option<RecordType> = match kind.parse() {
+        Err(_) => None,
+        Ok(v) => Some(v),
+    };
+
+    type_from_number
+        .or(type_from_str)
+        .map(|r| u16::from(r))
+        .ok_or_else(|| DonutError::InvalidInput)
 }
