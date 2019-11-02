@@ -3,7 +3,7 @@
 
 use crate::types::{DohAnswer, DohQuestion, DohRequest, DohResult, DonutError, DonutResult};
 use trust_dns::client::{Client, SyncClient};
-use trust_dns::rr::{DNSClass, Name, RData, RecordType};
+use trust_dns::rr::{DNSClass, Name, RData, Record, RecordType};
 use trust_dns::udp::UdpClientConnection;
 
 pub struct UdpResolverBackend {
@@ -28,13 +28,7 @@ impl UdpResolverBackend {
             .answers()
             .iter()
             .map(|record| {
-                let data = match record.rdata() {
-                    RData::A(v) => v.to_string(),
-                    RData::AAAA(v) => v.to_string(),
-                    RData::CNAME(v) => v.to_string(),
-                    _ => panic!("Unexpected result: {:?}", record),
-                };
-
+                let data = record_to_data(record);
                 DohAnswer::new(
                     record.name().to_utf8(),
                     u16::from(record.record_type()),
@@ -56,35 +50,65 @@ impl UdpResolverBackend {
         ))
     }
 }
+
 impl std::fmt::Debug for UdpResolverBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(f, "UdpResolverBackend {{ ... }}")
     }
 }
 
+///
+///
+///
+fn record_to_data(record: &Record) -> String {
+    match record.rdata() {
+        RData::A(v) => v.to_string(),
+        RData::AAAA(v) => v.to_string(),
+        RData::ANAME(v) => v.to_string(),
+        //RData::CAA(v) => ,
+        RData::CNAME(v) => v.to_string(),
+        RData::MX(v) => format!("{} {}", v.preference(), v.exchange()),
+        //RData::NAPTR(v) =>  ,
+        RData::NS(v) => v.to_string(),
+        //RData::NULL(v) =>  ,
+        //RData::OPENPGPKEY(v) => ,
+        //RData::OPT(v) => ,
+        RData::PTR(v) => v.to_string(),
+        //RData::SOA(v) => ,
+        RData::SRV(v) => format!("{} {} {} {}", v.priority(), v.weight(), v.port(), v.target()),
+        //RData::SSHFP(v) => ,
+        //RData::TLSA(v) => ,
+        //RData::TXT(v) => ,
+        _ => panic!("Unexpected result: {:?}", record),
+    }
+}
+
+///
+///
+///
 // TODO: Any validation. Does trust-dns do this?
 pub fn validate_name(name: &str) -> DonutResult<&str> {
     Ok(name)
 }
 
-// TODO: Parsing the input twice, always
+///
+///
+///
 pub fn validate_kind(kind: &str) -> DonutResult<u16> {
-    let type_from_number: Option<RecordType> =
-        kind.parse::<u16>()
-            .ok()
-            .map(|i| RecordType::from(i))
-            .and_then(|r| match r {
-                RecordType::Unknown(_) => None,
-                _ => Some(r),
-            });
+    let parsed_type: Option<RecordType> = kind
+        // Attempt to parse the input string as a number (1..65535)
+        .parse::<u16>()
+        .ok()
+        .map(|i| RecordType::from(i))
+        .and_then(|r| match r {
+            // Filter out the "unknown" variant that parsing yields
+            RecordType::Unknown(_) => None,
+            _ => Some(r),
+        })
+        // If it wasn't a number, try to parse it as a string (A, AAAA, etc).
+        .or_else(|| kind.to_uppercase().parse().ok());
 
-    let type_from_str: Option<RecordType> = match kind.parse() {
-        Err(_) => None,
-        Ok(v) => Some(v),
-    };
-
-    type_from_number
-        .or(type_from_str)
+    parsed_type
         .map(|r| u16::from(r))
         .ok_or_else(|| DonutError::InvalidInput)
 }

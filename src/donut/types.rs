@@ -42,12 +42,6 @@ impl From<DnsProtoError> for DonutError {
     }
 }
 
-impl From<url::ParseError> for DonutError {
-    fn from(_e: url::ParseError) -> Self {
-        DonutError::InvalidInput
-    }
-}
-
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
 pub struct DohRequest {
     pub name: String,
