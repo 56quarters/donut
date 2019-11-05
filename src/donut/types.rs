@@ -6,6 +6,7 @@ use serde::Serialize;
 use std::io;
 use trust_dns::error::{ClientError as DnsClientError, ParseError as DnsParseError};
 use trust_dns::proto::error::ProtoError as DnsProtoError;
+use trust_dns::rr::{Name, RecordType};
 
 pub type DonutResult<T> = Result<T, DonutError>;
 
@@ -20,8 +21,8 @@ pub enum DonutError {
     #[fail(display = "{}", _0)]
     DnsParseError(#[cause] DnsParseError),
 
-    #[fail(display = "invalid input")]
-    InvalidInput,
+    #[fail(display = "invalid input: {}", _0)]
+    InvalidInput(&'static str),
 }
 
 impl From<DnsClientError> for DonutError {
@@ -42,23 +43,22 @@ impl From<DnsProtoError> for DonutError {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DohRequest {
-    pub name: String,
-    pub kind: u16,
+    pub name: Name,
+    pub kind: RecordType,
     pub checking_disabled: bool,
     pub dnssec_data: bool,
     pub content_type: String,
 }
 
 impl DohRequest {
-    pub fn new<S1, S2>(name: S1, kind: u16, checking_disabled: bool, dnssec_data: bool, content_type: S2) -> Self
+    pub fn new<S>(name: Name, kind: RecordType, checking_disabled: bool, dnssec_data: bool, content_type: S) -> Self
     where
-        S1: Into<String>,
-        S2: Into<String>,
+        S: Into<String>,
     {
         DohRequest {
-            name: name.into(),
+            name,
             kind,
             checking_disabled,
             dnssec_data,

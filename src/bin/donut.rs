@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
-use trust_dns::client::SyncClient;
-use trust_dns::udp::UdpClientConnection;
 
 use donut::{http_route, UdpResolverBackend};
+use trust_dns::client::{Client, SyncClient};
+use trust_dns::udp::UdpClientConnection;
 
 fn new_udp_resolver(addr: &str) -> UdpResolverBackend {
     let address = addr.parse().unwrap();
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     });
 
     let server = Server::bind(&addr).serve(service);
-    println!("Listening on http://{}", addr);
+    eprintln!("Listening on http://{}", addr);
     server.await?;
 
     Ok(())

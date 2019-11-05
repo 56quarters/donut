@@ -1,9 +1,10 @@
-use crate::dns::{validate_kind, validate_name, UdpResolverBackend};
+use crate::dns::UdpResolverBackend;
 use crate::types::{DohRequest, DonutError, DonutResult};
 use hyper::header::CONTENT_TYPE;
 use hyper::{Body, Method, Request, Response, StatusCode};
 use std::collections::HashMap;
 use std::sync::Arc;
+use trust_dns::rr::{Name, RecordType};
 
 const DEFAULT_CONTENT_TYPE: &str = "application/dns-json";
 
@@ -13,7 +14,7 @@ pub async fn http_route(req: Request<Body>, dns: Arc<UdpResolverBackend>) -> Res
             let params = match get_request_from_params(&req) {
                 Ok(v) => v,
                 Err(e) => {
-                    eprint!("ERROR: {}", e);
+                    eprintln!("ERROR: {}", e);
                     return Ok(http_error_no_body(StatusCode::BAD_REQUEST));
                 }
             };
@@ -56,12 +57,12 @@ fn get_request_from_params(req: &Request<Body>) -> DonutResult<DohRequest> {
 
     let name = params
         .get("name")
-        .ok_or_else(|| DonutError::InvalidInput)
-        .and_then(|s| validate_name(s))?;
+        .ok_or_else(|| DonutError::InvalidInput("name"))
+        .and_then(|s| parse_query_name(s))?;
     let kind = params
         .get("type")
-        .ok_or_else(|| DonutError::InvalidInput)
-        .and_then(|s| validate_kind(s))?;
+        .ok_or_else(|| DonutError::InvalidInput("type"))
+        .and_then(|s| parse_requery_type(s))?;
     let dnssec_data = params
         .get("do")
         .map(|s| (s == "1" || s.to_lowercase() == "true"))
@@ -78,6 +79,33 @@ fn get_request_from_params(req: &Request<Body>) -> DonutResult<DohRequest> {
         dnssec_data,
         DEFAULT_CONTENT_TYPE,
     ))
+}
+
+///
+///
+///
+fn parse_query_name(name: &str) -> DonutResult<Name> {
+    name.parse().map_err(|_| DonutError::InvalidInput("name"))
+}
+
+///
+///
+///
+fn parse_requery_type(kind: &str) -> DonutResult<RecordType> {
+    let parsed_type: Option<RecordType> = kind
+        // Attempt to parse the input string as a number (1..65535)
+        .parse::<u16>()
+        .ok()
+        .map(|i| RecordType::from(i))
+        .and_then(|r| match r {
+            // Filter out the "unknown" variant that parsing yields
+            RecordType::Unknown(_) => None,
+            _ => Some(r),
+        })
+        // If it wasn't a number, try to parse it as a string (A, AAAA, etc).
+        .or_else(|| kind.to_uppercase().parse().ok());
+
+    parsed_type.ok_or_else(|| DonutError::InvalidInput("type"))
 }
 
 fn http_error_no_body(code: StatusCode) -> Response<Body> {
