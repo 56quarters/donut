@@ -1,7 +1,7 @@
 //
 //
 
-use crate::types::{DohAnswer, DohQuestion, DohRequest, DohResult, DonutResult};
+use crate::types::{DohAnswer, DohQuestion, DohRequest, DohResponse, DonutResult};
 use trust_dns::client::{Client, SyncClient};
 use trust_dns::rr::{DNSClass, RData, Record};
 use trust_dns::udp::UdpClientConnection;
@@ -31,7 +31,7 @@ impl UdpResolverBackend {
     ///
     ///
     ///
-    pub async fn resolve(&self, request: &DohRequest) -> DonutResult<DohResult> {
+    pub async fn resolve(&self, request: &DohRequest) -> DonutResult<DohResponse> {
         let res = self.client.query(&request.name, DNSClass::IN, request.kind)?;
         let question = DohQuestion::new(request.name.to_utf8(), u16::from(request.kind));
         let answers: Vec<DohAnswer> = res
@@ -48,7 +48,7 @@ impl UdpResolverBackend {
             })
             .collect();
 
-        Ok(DohResult::new(
+        Ok(DohResponse::new(
             u16::from(res.response_code()),
             res.truncated(),
             res.recursion_desired(),

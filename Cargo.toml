@@ -5,6 +5,7 @@ authors = ["Nick Pillitteri <nick@tshlabs.org>"]
 edition = "2018"
 
 [dependencies]
+clap = "2.33"
 failure = "0.1.6"
 hyper = { git = "https://github.com/hyperium/hyper.git", features = ["runtime", "unstable-stream"] }
 serde = { version = "1.0.101", features = ["derive"] }

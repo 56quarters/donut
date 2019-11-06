@@ -57,11 +57,11 @@ fn get_request_from_params(req: &Request<Body>) -> DonutResult<DohRequest> {
 
     let name = params
         .get("name")
-        .ok_or_else(|| DonutError::InvalidInput("name"))
+        .ok_or_else(|| DonutError::InvalidInputStr("name"))
         .and_then(|s| parse_query_name(s))?;
     let kind = params
         .get("type")
-        .ok_or_else(|| DonutError::InvalidInput("type"))
+        .ok_or_else(|| DonutError::InvalidInputStr("type"))
         .and_then(|s| parse_requery_type(s))?;
     let dnssec_data = params
         .get("do")
@@ -85,7 +85,7 @@ fn get_request_from_params(req: &Request<Body>) -> DonutResult<DohRequest> {
 ///
 ///
 fn parse_query_name(name: &str) -> DonutResult<Name> {
-    name.parse().map_err(|_| DonutError::InvalidInput("name"))
+    name.parse().map_err(|_| DonutError::InvalidInputStr("name"))
 }
 
 ///
@@ -105,7 +105,7 @@ fn parse_requery_type(kind: &str) -> DonutResult<RecordType> {
         // If it wasn't a number, try to parse it as a string (A, AAAA, etc).
         .or_else(|| kind.to_uppercase().parse().ok());
 
-    parsed_type.ok_or_else(|| DonutError::InvalidInput("type"))
+    parsed_type.ok_or_else(|| DonutError::InvalidInputStr("type"))
 }
 
 fn http_error_no_body(code: StatusCode) -> Response<Body> {

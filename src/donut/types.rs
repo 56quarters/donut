@@ -1,6 +1,7 @@
 //
 //
 
+use clap::Error as ClapError;
 use failure::Fail;
 use serde::Serialize;
 use std::io;
@@ -22,7 +23,16 @@ pub enum DonutError {
     DnsParseError(#[cause] DnsParseError),
 
     #[fail(display = "invalid input: {}", _0)]
-    InvalidInput(&'static str),
+    InvalidInputStr(&'static str),
+
+    #[fail(display = "invalid input: {}", _0)]
+    InvalidInputString(String),
+}
+
+impl From<io::Error> for DonutError {
+    fn from(e: io::Error) -> Self {
+        DonutError::IoError(e)
+    }
 }
 
 impl From<DnsClientError> for DonutError {
@@ -40,6 +50,12 @@ impl From<DnsParseError> for DonutError {
 impl From<DnsProtoError> for DonutError {
     fn from(e: DnsProtoError) -> Self {
         DonutError::DnsParseError(DnsParseError::from(e))
+    }
+}
+
+impl From<ClapError> for DonutError {
+    fn from(e: ClapError) -> Self {
+        DonutError::InvalidInputString(format!("{}", e))
     }
 }
 
@@ -119,7 +135,7 @@ impl DohAnswer {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
-pub struct DohResult {
+pub struct DohResponse {
     #[serde(rename = "Status")]
     status: u16,
 
@@ -145,7 +161,7 @@ pub struct DohResult {
     answers: Vec<DohAnswer>,
 }
 
-impl DohResult {
+impl DohResponse {
     pub fn new(
         status: u16,
         truncated: bool,
@@ -156,7 +172,7 @@ impl DohResult {
         questions: Vec<DohQuestion>,
         answers: Vec<DohAnswer>,
     ) -> Self {
-        DohResult {
+        DohResponse {
             status,
             truncated,
             recursion_desired,
