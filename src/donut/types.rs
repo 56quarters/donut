@@ -1,7 +1,6 @@
 //
 //
 
-use clap::Error as ClapError;
 use failure::Fail;
 use serde::Serialize;
 use std::io;
@@ -50,12 +49,6 @@ impl From<DnsParseError> for DonutError {
 impl From<DnsProtoError> for DonutError {
     fn from(e: DnsProtoError) -> Self {
         DonutError::DnsParseError(DnsParseError::from(e))
-    }
-}
-
-impl From<ClapError> for DonutError {
-    fn from(e: ClapError) -> Self {
-        DonutError::InvalidInputString(format!("{}", e))
     }
 }
 

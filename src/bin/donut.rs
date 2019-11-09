@@ -1,15 +1,22 @@
 use clap::{crate_version, value_t, App, Arg, ArgMatches};
-use donut::{http_route, DonutError, DonutResult, UdpResolverBackend};
+use donut::{http_route, UdpResolverBackend};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
 use std::env;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::SocketAddr;
 use std::process;
 use std::sync::Arc;
-use trust_dns::client::{Client, SyncClient};
+use trust_dns::client::SyncClient;
 use trust_dns::udp::UdpClientConnection;
 
 const MAX_TERM_WIDTH: usize = 72;
+
+// Set up the default upstream DNS server. We do this instead of using the
+// `.default_value(...)` methods of clap because we need to mark the various
+// types as conflicting with each other. This isn't possible when using default
+// values. Instead, we create them in an easy to use form here (something that
+// works with `SocketAddr::from()`).
+const DEFAULT_UPSTREAM_UDP: ([u8; 4], u16) = ([127, 0, 0, 1], 53);
 
 fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
     App::new("Donut DNS over HTTPS server")
@@ -19,23 +26,8 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
         .arg(
             Arg::with_name("upstream-udp")
                 .long("upstream-udp")
-                .default_value("127.0.0.1:53")
-                .help("Send DNS queries to this upstream DNS server (via DNS over UDP).")
-                .conflicts_with_all(&["upstream-tls", "upstream-https"]),
-        )
-        .arg(
-            Arg::with_name("upstream-tls")
-                .long("upstream-tls")
-                .default_value("127.0.0.1:853")
-                .help("Send DNS queries to this upstream DNS server (via DNS over TLS).")
-                .conflicts_with_all(&["upstream-udp", "upstream-https"]),
-        )
-        .arg(
-            Arg::with_name("upstream-https")
-                .long("upstream-https")
-                .default_value("127.0.0.1:443")
-                .help("Send DNS queries to this upstream DNS server (via DNS over HTTPS).")
-                .conflicts_with_all(&["upstream-udp", "upstream-tls"]),
+                .takes_value(true)
+                .help("Send DNS queries to this upstream DNS server (via DNS over UDP)."),
         )
         .arg(
             Arg::with_name("bind")
@@ -46,20 +38,18 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
         .get_matches_from(args)
 }
 
-fn to_socket_addr<A>(addr: A) -> DonutResult<SocketAddr>
-where
-    A: ToSocketAddrs,
-{
-    match addr.to_socket_addrs()?.next() {
-        Some(addr) => Ok(addr),
-        None => Err(DonutError::InvalidInputStr("socket address")),
-    }
-}
-
 fn new_udp_resolver(addr: SocketAddr) -> UdpResolverBackend {
     let conn = UdpClientConnection::new(addr).unwrap();
     let client = SyncClient::new(conn);
     UdpResolverBackend::new(client)
+}
+
+fn get_upstream(matches: &ArgMatches, param: &str) -> Option<Result<SocketAddr, clap::Error>> {
+    match value_t!(matches, param, SocketAddr) {
+        Err(e) if e.kind == clap::ErrorKind::ArgumentNotFound => None,
+        Err(e) => Some(Err(e)),
+        Ok(v) => Some(Ok(v)),
+    }
 }
 
 #[tokio::main]
@@ -67,33 +57,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args: Vec<String> = env::args().collect();
     let matches = parse_cli_opts(args);
 
-    let upstream = value_t!(matches, "upstream-udp", String)
-        .map_err(|e| DonutError::from(e))
-        .and_then(|a| to_socket_addr(a))
-        .unwrap_or_else(|e| {
-            eprintln!("error: {}", e);
-            process::exit(1);
-        });
-
+    let upstream = match get_upstream(&matches, "upstream-udp") {
+        Some(Ok(v)) => v,
+        Some(Err(e)) => e.exit(),
+        None => SocketAddr::from(DEFAULT_UPSTREAM_UDP),
+    };
     let resolver = Arc::new(new_udp_resolver(upstream.clone()));
+
     let service = make_service_fn(move |_| {
         let resolver = resolver.clone();
         async move { Ok::<_, hyper::Error>(service_fn(move |req| http_route(req, resolver.clone()))) }
     });
 
-    let bind_addr = value_t!(matches, "bind", String)
-        .map_err(|e| DonutError::from(e))
-        .and_then(|a| to_socket_addr(a))
-        .unwrap_or_else(|e| {
-            eprintln!("error: {}", e);
-            process::exit(1);
-        });
-
-    let server = Server::try_bind(&bind_addr)
-        .unwrap_or_else(|e| {
-            eprintln!("error: {}", e);
-            process::exit(1);
-        });
+    let bind_addr = value_t!(matches, "bind", SocketAddr).unwrap_or_else(|e| e.exit());
+    let server = Server::try_bind(&bind_addr).unwrap_or_else(|e| {
+        eprintln!("error: {}", e);
+        process::exit(1);
+    });
 
     eprintln!("Using upstream DNS {}", upstream);
     eprintln!("Listening on http://{}", bind_addr);
