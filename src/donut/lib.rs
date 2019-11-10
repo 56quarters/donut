@@ -3,6 +3,8 @@
 
 mod dns;
 mod http;
+mod request;
+mod response;
 mod types;
 
 pub use crate::dns::UdpResolverBackend;

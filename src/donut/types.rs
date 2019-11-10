@@ -58,20 +58,15 @@ pub struct DohRequest {
     pub kind: RecordType,
     pub checking_disabled: bool,
     pub dnssec_data: bool,
-    pub content_type: String,
 }
 
 impl DohRequest {
-    pub fn new<S>(name: Name, kind: RecordType, checking_disabled: bool, dnssec_data: bool, content_type: S) -> Self
-    where
-        S: Into<String>,
-    {
+    pub fn new(name: Name, kind: RecordType, checking_disabled: bool, dnssec_data: bool) -> Self {
         DohRequest {
             name,
             kind,
             checking_disabled,
             dnssec_data,
-            content_type: content_type.into(),
         }
     }
 }
