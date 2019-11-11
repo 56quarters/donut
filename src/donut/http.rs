@@ -26,7 +26,7 @@ impl HandlerContext {
 
 pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Result<Response<Body>, hyper::Error> {
     match (req.method(), req.uri().path()) {
-        (&Method::GET, "/") => {
+        (&Method::GET, "/dns-query") => {
             let params = match context.parser.parse(&req) {
                 Ok(v) => v,
                 Err(e) => {
