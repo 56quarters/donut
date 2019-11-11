@@ -1,5 +1,8 @@
 use clap::{crate_version, value_t, App, Arg, ArgMatches};
-use donut::{http_route, UdpResolverBackend};
+use donut::http::{http_route, HandlerContext};
+use donut::request::RequestParserJsonGet;
+use donut::resolve::UdpResolver;
+use donut::response::ResponseEncoderJson;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
 use std::env;
@@ -38,10 +41,15 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
         .get_matches_from(args)
 }
 
-fn new_udp_resolver(addr: SocketAddr) -> UdpResolverBackend {
+fn new_handler_context(addr: SocketAddr) -> HandlerContext {
     let conn = UdpClientConnection::new(addr).unwrap();
     let client = SyncClient::new(conn);
-    UdpResolverBackend::new(client)
+
+    let resolver = UdpResolver::new(client);
+    let parser = RequestParserJsonGet::new();
+    let encoder = ResponseEncoderJson::new();
+
+    HandlerContext::new(parser, resolver, encoder)
 }
 
 fn get_upstream(matches: &ArgMatches, param: &str) -> Option<Result<SocketAddr, clap::Error>> {
@@ -62,11 +70,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Some(Err(e)) => e.exit(),
         None => SocketAddr::from(DEFAULT_UPSTREAM_UDP),
     };
-    let resolver = Arc::new(new_udp_resolver(upstream.clone()));
+    let context = Arc::new(new_handler_context(upstream.clone()));
 
     let service = make_service_fn(move |_| {
-        let resolver = resolver.clone();
-        async move { Ok::<_, hyper::Error>(service_fn(move |req| http_route(req, resolver.clone()))) }
+        let context = context.clone();
+        async move { Ok::<_, hyper::Error>(service_fn(move |req| http_route(req, context.clone()))) }
     });
 
     let bind_addr = value_t!(matches, "bind", SocketAddr).unwrap_or_else(|e| e.exit());

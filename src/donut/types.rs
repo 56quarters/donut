@@ -3,6 +3,7 @@
 
 use failure::Fail;
 use serde::Serialize;
+use serde_json::Error as SerdeError;
 use std::io;
 use trust_dns::error::{ClientError as DnsClientError, ParseError as DnsParseError};
 use trust_dns::proto::error::ProtoError as DnsProtoError;
@@ -26,6 +27,9 @@ pub enum DonutError {
 
     #[fail(display = "invalid input: {}", _0)]
     InvalidInputString(String),
+
+    #[fail(display = "{}", _0)]
+    SerializationError(#[cause] SerdeError),
 }
 
 impl From<io::Error> for DonutError {
@@ -52,6 +56,12 @@ impl From<DnsProtoError> for DonutError {
     }
 }
 
+impl From<SerdeError> for DonutError {
+    fn from(e: SerdeError) -> Self {
+        DonutError::SerializationError(e)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DohRequest {
     pub name: Name,
@@ -72,7 +82,7 @@ impl DohRequest {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
-pub struct DohQuestion {
+pub struct JsonQuestion {
     #[serde(rename = "name")]
     pub name: String,
 
@@ -80,12 +90,12 @@ pub struct DohQuestion {
     pub kind: u16,
 }
 
-impl DohQuestion {
+impl JsonQuestion {
     pub fn new<S>(name: S, kind: u16) -> Self
     where
         S: Into<String>,
     {
-        DohQuestion {
+        JsonQuestion {
             name: name.into(),
             kind,
         }
@@ -93,7 +103,7 @@ impl DohQuestion {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
-pub struct DohAnswer {
+pub struct JsonAnswer {
     #[serde(rename = "name")]
     pub name: String,
 
@@ -107,13 +117,13 @@ pub struct DohAnswer {
     pub data: String,
 }
 
-impl DohAnswer {
+impl JsonAnswer {
     pub fn new<S1, S2>(name: S1, kind: u16, ttl: u32, data: S2) -> Self
     where
         S1: Into<String>,
         S2: Into<String>,
     {
-        DohAnswer {
+        JsonAnswer {
             name: name.into(),
             kind,
             ttl,
@@ -123,7 +133,7 @@ impl DohAnswer {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
-pub struct DohResponse {
+pub struct JsonResponse {
     #[serde(rename = "Status")]
     status: u16,
 
@@ -143,13 +153,13 @@ pub struct DohResponse {
     checking_disabled: bool,
 
     #[serde(rename = "Question")]
-    questions: Vec<DohQuestion>,
+    questions: Vec<JsonQuestion>,
 
     #[serde(rename = "Answer")]
-    answers: Vec<DohAnswer>,
+    answers: Vec<JsonAnswer>,
 }
 
-impl DohResponse {
+impl JsonResponse {
     pub fn new(
         status: u16,
         truncated: bool,
@@ -157,10 +167,10 @@ impl DohResponse {
         recursion_available: bool,
         all_validated: bool,
         checking_disabled: bool,
-        questions: Vec<DohQuestion>,
-        answers: Vec<DohAnswer>,
+        questions: Vec<JsonQuestion>,
+        answers: Vec<JsonAnswer>,
     ) -> Self {
-        DohResponse {
+        JsonResponse {
             status,
             truncated,
             recursion_desired,

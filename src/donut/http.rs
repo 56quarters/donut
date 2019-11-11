@@ -1,5 +1,6 @@
-use crate::dns::UdpResolverBackend;
 use crate::request::RequestParserJsonGet;
+use crate::resolve::UdpResolver;
+use crate::response::ResponseEncoderJson;
 use hyper::header::CONTENT_TYPE;
 use hyper::{Body, Method, Request, Response, StatusCode};
 use std::sync::Arc;
@@ -7,11 +8,26 @@ use std::sync::Arc;
 const WIRE_MESSAGE_FORMAT: &str = "application/dns-message";
 const JSON_MESSAGE_FORMAT: &str = "application/dns-json";
 
-pub async fn http_route(req: Request<Body>, dns: Arc<UdpResolverBackend>) -> Result<Response<Body>, hyper::Error> {
+pub struct HandlerContext {
+    parser: RequestParserJsonGet,
+    resolver: UdpResolver,
+    encoder: ResponseEncoderJson,
+}
+
+impl HandlerContext {
+    pub fn new(parser: RequestParserJsonGet, resolver: UdpResolver, encoder: ResponseEncoderJson) -> Self {
+        HandlerContext {
+            parser,
+            resolver,
+            encoder,
+        }
+    }
+}
+
+pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Result<Response<Body>, hyper::Error> {
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => {
-            let parser = RequestParserJsonGet::new();
-            let params = match parser.parse(&req) {
+            let params = match context.parser.parse(&req) {
                 Ok(v) => v,
                 Err(e) => {
                     eprintln!("ERROR: {}", e);
@@ -19,7 +35,7 @@ pub async fn http_route(req: Request<Body>, dns: Arc<UdpResolverBackend>) -> Res
                 }
             };
 
-            let result = match dns.resolve(&params).await {
+            let result = match context.resolver.resolve(&params).await {
                 Ok(v) => v,
                 Err(e) => {
                     eprintln!("ERROR: {}", e);
@@ -27,7 +43,7 @@ pub async fn http_route(req: Request<Body>, dns: Arc<UdpResolverBackend>) -> Res
                 }
             };
 
-            let body = match serde_json::to_vec(&result) {
+            let body = match context.encoder.encode(&params, &result) {
                 Ok(v) => v,
                 Err(e) => {
                     eprintln!("ERROR: {}", e);
