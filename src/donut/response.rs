@@ -1,5 +1,6 @@
 use crate::types::{DohRequest, DonutResult, JsonAnswer, JsonQuestion, JsonResponse};
 use trust_dns::op::DnsResponse;
+use trust_dns::proto::serialize::binary::BinEncodable;
 use trust_dns::rr::{RData, Record};
 
 ///
@@ -73,4 +74,24 @@ impl ResponseEncoderJson {
     }
 }
 
+///
+///
+///
+#[derive(Default, Debug, Clone)]
 pub struct ResponseEncoderWire;
+
+impl ResponseEncoderWire {
+    ///
+    ///
+    ///
+    pub fn new() -> Self {
+        ResponseEncoderWire
+    }
+
+    ///
+    ///
+    ///
+    pub fn encode(&self, req: &DohRequest, res: &DnsResponse) -> DonutResult<Vec<u8>> {
+        Ok(res.to_bytes()?)
+    }
+}

@@ -1,5 +1,5 @@
 use clap::{crate_version, value_t, App, Arg, ArgMatches};
-use donut::http::{http_route, HandlerContext};
+use donut::http::{http_route, JsonHandlerContext};
 use donut::request::RequestParserJsonGet;
 use donut::resolve::UdpResolver;
 use donut::response::ResponseEncoderJson;
@@ -41,7 +41,7 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
         .get_matches_from(args)
 }
 
-fn new_handler_context(addr: SocketAddr) -> HandlerContext {
+fn new_handler_context(addr: SocketAddr) -> JsonHandlerContext {
     let conn = UdpClientConnection::new(addr).unwrap();
     let client = SyncClient::new(conn);
 
@@ -49,7 +49,7 @@ fn new_handler_context(addr: SocketAddr) -> HandlerContext {
     let parser = RequestParserJsonGet::new();
     let encoder = ResponseEncoderJson::new();
 
-    HandlerContext::new(parser, resolver, encoder)
+    JsonHandlerContext::new(parser, resolver, encoder)
 }
 
 fn get_upstream(matches: &ArgMatches, param: &str) -> Option<Result<SocketAddr, clap::Error>> {

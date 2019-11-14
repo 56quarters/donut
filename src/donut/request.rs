@@ -37,9 +37,49 @@ impl RequestParserJsonGet {
     }
 }
 
+///
+///
+///
+#[derive(Default, Debug, Clone)]
 pub struct RequestParserWireGet;
 
+impl RequestParserWireGet {
+    ///
+    ///
+    ///
+    pub fn new() -> Self {
+        RequestParserWireGet
+    }
+
+    ///
+    ///
+    ///
+    pub fn parse(&self, req: &Request<Body>) -> DonutResult<DohRequest> {
+        unimplemented!();
+    }
+}
+
+///
+///
+///
+#[derive(Default, Debug, Clone)]
 pub struct RequestParserWirePost;
+
+impl RequestParserWirePost {
+    ///
+    ///
+    ///
+    pub fn new() -> Self {
+        RequestParserWirePost
+    }
+
+    ///
+    ///
+    ///
+    pub fn parse(&self, req: &Request<Body>) -> DonutResult<DohRequest> {
+        unimplemented!();
+    }
+}
 
 ///
 ///
