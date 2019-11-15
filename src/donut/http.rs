@@ -1,7 +1,7 @@
 use crate::request::{RequestParserJsonGet, RequestParserWireGet};
 use crate::resolve::UdpResolver;
 use crate::response::{ResponseEncoderJson, ResponseEncoderWire};
-use hyper::header::{CONTENT_TYPE, ACCEPT, HeaderValue};
+use hyper::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
 use hyper::{Body, Method, Request, Response, StatusCode};
 use std::sync::Arc;
 

@@ -25,7 +25,7 @@ impl ResponseEncoderJson {
             .answers()
             .iter()
             .map(|record| {
-                let data = self.record_to_data(record);
+                let data = Self::record_to_data(record);
                 JsonAnswer::new(
                     record.name().to_utf8(),
                     u16::from(record.record_type()),
@@ -50,7 +50,7 @@ impl ResponseEncoderJson {
     ///
     ///
     ///
-    fn record_to_data(&self, record: &Record) -> String {
+    fn record_to_data(record: &Record) -> String {
         match record.rdata() {
             RData::A(v) => v.to_string(),
             RData::AAAA(v) => v.to_string(),

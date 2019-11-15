@@ -1,6 +1,7 @@
 //
 //
 
+use base64::DecodeError;
 use failure::Fail;
 use serde::Serialize;
 use serde_json::Error as SerdeError;
@@ -15,6 +16,9 @@ pub type DonutResult<T> = Result<T, DonutError>;
 pub enum DonutError {
     #[fail(display = "{}", _0)]
     IoError(#[cause] io::Error),
+
+    #[fail(display = "{}", _0)]
+    Base64Error(#[cause] DecodeError),
 
     #[fail(display = "{}", _0)]
     DnsClientError(#[cause] DnsClientError),
@@ -35,6 +39,12 @@ pub enum DonutError {
 impl From<io::Error> for DonutError {
     fn from(e: io::Error) -> Self {
         DonutError::IoError(e)
+    }
+}
+
+impl From<DecodeError> for DonutError {
+    fn from(e: DecodeError) -> Self {
+        DonutError::Base64Error(e)
     }
 }
 
@@ -62,12 +72,14 @@ impl From<SerdeError> for DonutError {
     }
 }
 
+// TODO: Support multiple name + type pairs?
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DohRequest {
     pub name: Name,
     pub kind: RecordType,
     pub checking_disabled: bool,
     pub dnssec_data: bool,
+    pub queries: Vec<(Name, RecordType)>,
 }
 
 impl DohRequest {
@@ -77,6 +89,7 @@ impl DohRequest {
             kind,
             checking_disabled,
             dnssec_data,
+            queries: Vec::new(),
         }
     }
 }
