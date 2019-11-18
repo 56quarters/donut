@@ -21,11 +21,11 @@ impl RequestParserJsonGet {
 
         let name = params
             .get("name")
-            .ok_or_else(|| DonutError::InvalidInputStr("name"))
+            .ok_or_else(|| DonutError::InvalidInputStr("missing query name"))
             .and_then(|s| Self::parse_query_name(s))?;
         let kind = params
             .get("type")
-            .ok_or_else(|| DonutError::InvalidInputStr("type"))
+            .ok_or_else(|| DonutError::InvalidInputStr("missing query type"))
             .and_then(|s| Self::parse_requery_type(s))?;
         let dnssec_data = params
             .get("do")
@@ -43,7 +43,8 @@ impl RequestParserJsonGet {
     ///
     ///
     fn parse_query_name(name: &str) -> DonutResult<Name> {
-        name.parse().map_err(|_| DonutError::InvalidInputStr("name"))
+        name.parse()
+            .map_err(|_| DonutError::InvalidInputStr("invalid query name"))
     }
 
     ///
@@ -63,7 +64,7 @@ impl RequestParserJsonGet {
             // If it wasn't a number, try to parse it as a string (A, AAAA, etc).
             .or_else(|| kind.to_uppercase().parse().ok());
 
-        parsed_type.ok_or_else(|| DonutError::InvalidInputStr("type"))
+        parsed_type.ok_or_else(|| DonutError::InvalidInputStr("invalid query type"))
     }
 }
 
@@ -89,13 +90,19 @@ impl RequestParserWireGet {
         let query = url::form_urlencoded::parse(qs.as_bytes());
         let params: HashMap<String, String> = query.into_owned().collect();
 
-        let request_bytes = params
+        let message = params
             .get("dns")
-            .ok_or_else(|| DonutError::InvalidInputStr("dns"))
-            .and_then(|d| base64::decode(d).map_err(|e| DonutError::from(e)))
+            .ok_or_else(|| DonutError::InvalidInputStr("missing dns field"))
+            .and_then(|d| base64::decode_config(d, base64::URL_SAFE_NO_PAD).map_err(|e| DonutError::from(e)))
             .and_then(|b| Message::from_bytes(&b).map_err(|e| DonutError::from(e)))?;
 
-        unimplemented!();
+        let (name, kind) = message
+            .queries()
+            .first()
+            .map(|q| (q.name().clone(), q.query_type()))
+            .ok_or_else(|| DonutError::InvalidInputStr("missing question"))?;
+
+        Ok(DohRequest::new(name, kind, message.checking_disabled(), false))
     }
 }
 
