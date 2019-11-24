@@ -1,8 +1,8 @@
 use clap::{crate_version, value_t, App, Arg, ArgMatches};
-use donut::http::{http_route, JsonHandlerContext};
-use donut::request::RequestParserJsonGet;
+use donut::http::{http_route, HandlerContext};
+use donut::request::{RequestParserJsonGet, RequestParserWireGet};
 use donut::resolve::UdpResolver;
-use donut::response::ResponseEncoderJson;
+use donut::response::{ResponseEncoderJson, ResponseEncoderWire};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
 use std::env;
@@ -41,15 +41,17 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
         .get_matches_from(args)
 }
 
-fn new_handler_context(addr: SocketAddr) -> JsonHandlerContext {
+fn new_handler_context(addr: SocketAddr) -> HandlerContext {
     let conn = UdpClientConnection::new(addr).unwrap();
     let client = SyncClient::new(conn);
 
     let resolver = UdpResolver::new(client);
-    let parser = RequestParserJsonGet::new();
-    let encoder = ResponseEncoderJson::new();
+    let json_parser = RequestParserJsonGet::new();
+    let get_parser = RequestParserWireGet::new();
+    let json_encoder = ResponseEncoderJson::new();
+    let wire_encoder = ResponseEncoderWire::new();
 
-    JsonHandlerContext::new(parser, resolver, encoder)
+    HandlerContext::new(json_parser, get_parser, resolver, json_encoder, wire_encoder)
 }
 
 fn get_upstream(matches: &ArgMatches, param: &str) -> Option<Result<SocketAddr, clap::Error>> {
