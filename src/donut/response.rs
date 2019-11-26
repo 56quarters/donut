@@ -1,4 +1,24 @@
-use crate::types::{DohRequest, DonutResult, JsonAnswer, JsonQuestion, JsonResponse};
+// Donut - DNS over HTTPS server
+//
+// Copyright 2019 Nick Pillitteri
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//
+
+use crate::types::{DohRequest, DonutResult};
+use serde::Serialize;
+use serde_json::Error as SerdeError;
 use trust_dns::op::DnsResponse;
 use trust_dns::proto::serialize::binary::BinEncodable;
 use trust_dns::rr::{RData, Record};
@@ -20,7 +40,12 @@ impl ResponseEncoderJson {
     ///
     ///
     pub fn encode(&self, req: &DohRequest, res: &DnsResponse) -> DonutResult<Vec<u8>> {
-        let question = JsonQuestion::new(req.name.to_utf8(), u16::from(req.kind));
+        let questions: Vec<JsonQuestion> = res
+            .queries()
+            .iter()
+            .map(|query| JsonQuestion::new(query.name().to_utf8(), u16::from(query.query_type())))
+            .collect();
+
         let answers: Vec<JsonAnswer> = res
             .answers()
             .iter()
@@ -42,7 +67,7 @@ impl ResponseEncoderJson {
             res.recursion_available(),
             false,
             true,
-            vec![question],
+            questions,
             answers,
         ))?)
     }
@@ -74,6 +99,108 @@ impl ResponseEncoderJson {
     }
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Serialize)]
+pub struct JsonQuestion {
+    #[serde(rename = "name")]
+    pub name: String,
+
+    #[serde(rename = "type")]
+    pub kind: u16,
+}
+
+impl JsonQuestion {
+    pub fn new<S>(name: S, kind: u16) -> Self
+    where
+        S: Into<String>,
+    {
+        JsonQuestion {
+            name: name.into(),
+            kind,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Serialize)]
+pub struct JsonAnswer {
+    #[serde(rename = "name")]
+    pub name: String,
+
+    #[serde(rename = "type")]
+    pub kind: u16,
+
+    #[serde(rename = "TTL")]
+    pub ttl: u32,
+
+    #[serde(rename = "data")]
+    pub data: String,
+}
+
+impl JsonAnswer {
+    pub fn new<S1, S2>(name: S1, kind: u16, ttl: u32, data: S2) -> Self
+    where
+        S1: Into<String>,
+        S2: Into<String>,
+    {
+        JsonAnswer {
+            name: name.into(),
+            kind,
+            ttl,
+            data: data.into(),
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Serialize)]
+pub struct JsonResponse {
+    #[serde(rename = "Status")]
+    status: u16,
+
+    #[serde(rename = "TC")]
+    truncated: bool,
+
+    #[serde(rename = "RD")]
+    recursion_desired: bool,
+
+    #[serde(rename = "RA")]
+    recursion_available: bool,
+
+    #[serde(rename = "AD")]
+    all_validated: bool,
+
+    #[serde(rename = "CD")]
+    checking_disabled: bool,
+
+    #[serde(rename = "Question")]
+    questions: Vec<JsonQuestion>,
+
+    #[serde(rename = "Answer")]
+    answers: Vec<JsonAnswer>,
+}
+
+impl JsonResponse {
+    pub fn new(
+        status: u16,
+        truncated: bool,
+        recursion_desired: bool,
+        recursion_available: bool,
+        all_validated: bool,
+        checking_disabled: bool,
+        questions: Vec<JsonQuestion>,
+        answers: Vec<JsonAnswer>,
+    ) -> Self {
+        JsonResponse {
+            status,
+            truncated,
+            recursion_desired,
+            recursion_available,
+            all_validated,
+            checking_disabled,
+            questions,
+            answers,
+        }
+    }
+}
+
 ///
 ///
 ///
@@ -91,7 +218,7 @@ impl ResponseEncoderWire {
     ///
     ///
     ///
-    pub fn encode(&self, req: &DohRequest, res: &DnsResponse) -> DonutResult<Vec<u8>> {
+    pub fn encode(&self, _req: &DohRequest, res: &DnsResponse) -> DonutResult<Vec<u8>> {
         Ok(res.to_bytes()?)
     }
 }

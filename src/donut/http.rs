@@ -1,3 +1,21 @@
+// Donut - DNS over HTTPS server
+//
+// Copyright 2019 Nick Pillitteri
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//
+
 use crate::request::{RequestParserJsonGet, RequestParserWireGet};
 use crate::resolve::UdpResolver;
 use crate::response::{ResponseEncoderJson, ResponseEncoderWire};
@@ -36,6 +54,8 @@ impl HandlerContext {
 
 pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Result<Response<Body>, hyper::Error> {
     // TODO: Match on Accept header to pick between wire / json format
+    // TODO: Less copy/paste
+    // TODO: tool to read from stdin and parse DNS response as text
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/dns-json") => {
             let params = match context.json_parser.parse(&req) {
@@ -117,18 +137,6 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
 
         _ => Ok(http_error_no_body(StatusCode::NOT_FOUND)),
     }
-}
-
-fn is_json_get(req: &Request<Body>) -> bool {
-    unimplemented!();
-}
-
-fn is_wire_get(req: &Request<Body>) -> bool {
-    unimplemented!();
-}
-
-fn is_wire_post(req: &Request<Body>) -> bool {
-    unimplemented!();
 }
 
 fn http_error_no_body(code: StatusCode) -> Response<Body> {
