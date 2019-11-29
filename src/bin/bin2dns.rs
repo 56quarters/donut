@@ -16,33 +16,22 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use clap::{crate_version, App, ArgMatches};
-use std::env;
 use tokio::prelude::*;
 use trust_dns::op::Message;
 
-const MAX_TERM_WIDTH: usize = 72;
-
-fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
-    App::new("Print text representation of a binary DNS response")
-        .version(crate_version!())
-        .set_term_width(MAX_TERM_WIDTH)
-        .about("\nRead DNS binary response from stdin and print a text representation")
-        .get_matches_from(args)
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let args: Vec<String> = env::args().collect();
-    let _matches = parse_cli_opts(args);
-
     let mut buf = Vec::new();
     let mut stdin = tokio::io::stdin();
-    stdin.read_to_end(&mut buf).await?;
+    let read = stdin.read_to_end(&mut buf).await?;
+    if read == 0 {
+        eprintln!("error: empty payload, {} bytes read", read);
+        return Ok(());
+    }
 
     match Message::from_vec(&buf) {
         Ok(v) => {
-            println!("{:?}", v);
+            println!("{}", format_message(&v));
         }
         Err(e) => {
             eprintln!("decoding error: {}", e);
@@ -50,4 +39,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     Ok(())
+}
+
+fn format_question(mes: &Message) -> String {
+    format!(
+        ";; QUESTION SECTION:\n{}",
+        mes.queries()
+            .iter()
+            .map(|q| format!("; {}\t\t{}\t{}", q.name().to_utf8(), q.query_class(), q.query_type()))
+            .collect::<Vec<String>>()
+            .join(",")
+    )
+}
+
+fn format_answer(mes: &Message) -> String {
+    format!(
+        ";; ANSWER SECTION:\n{}",
+        mes.answers()
+            .iter()
+            .map(|a| format!(
+                "{}\t{}\t{}\t{}\t{}",
+                a.name().to_utf8(),
+                a.ttl(),
+                a.dns_class(),
+                a.record_type(),
+                donut::response::record_to_data(a),
+            ))
+            .collect::<Vec<String>>()
+            .join("\n")
+    )
+}
+
+fn format_query_info(mes: &Message) -> String {
+    unimplemented!();
+}
+
+fn format_message(mes: &Message) -> String {
+    format!("{}\n\n{}", format_question(mes), format_answer(mes))
 }

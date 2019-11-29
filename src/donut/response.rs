@@ -16,9 +16,8 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use crate::types::{DohRequest, DonutResult};
+use crate::types::DonutResult;
 use serde::Serialize;
-use serde_json::Error as SerdeError;
 use trust_dns::op::DnsResponse;
 use trust_dns::proto::serialize::binary::BinEncodable;
 use trust_dns::rr::{RData, Record};
@@ -39,7 +38,7 @@ impl ResponseEncoderJson {
     ///
     ///
     ///
-    pub fn encode(&self, req: &DohRequest, res: &DnsResponse) -> DonutResult<Vec<u8>> {
+    pub fn encode(&self, res: &DnsResponse) -> DonutResult<Vec<u8>> {
         let questions: Vec<JsonQuestion> = res
             .queries()
             .iter()
@@ -50,7 +49,7 @@ impl ResponseEncoderJson {
             .answers()
             .iter()
             .map(|record| {
-                let data = Self::record_to_data(record);
+                let data = record_to_data(record);
                 JsonAnswer::new(
                     record.name().to_utf8(),
                     u16::from(record.record_type()),
@@ -71,45 +70,42 @@ impl ResponseEncoderJson {
             answers,
         ))?)
     }
+}
 
-    ///
-    ///
-    ///
-    fn record_to_data(record: &Record) -> String {
-        match record.rdata() {
-            RData::A(v) => v.to_string(),
-            RData::AAAA(v) => v.to_string(),
-            RData::ANAME(v) => v.to_string(),
-            //RData::CAA(v) => ,
-            RData::CNAME(v) => v.to_string(),
-            RData::MX(v) => format!("{} {}", v.preference(), v.exchange()),
-            //RData::NAPTR(v) => ,
-            RData::NS(v) => v.to_string(),
-            //RData::NULL(v) =>  ,
-            //RData::OPENPGPKEY(v) => ,
-            //RData::OPT(v) => ,
-            RData::PTR(v) => v.to_string(),
-            //RData::SOA(v) => ,
-            RData::SRV(v) => format!("{} {} {} {}", v.priority(), v.weight(), v.port(), v.target()),
-            //RData::SSHFP(v) => ,
-            //RData::TLSA(v) => ,
-            //RData::TXT(v) => ,
-            _ => panic!("Unexpected result: {:?}", record),
-        }
+pub fn record_to_data(record: &Record) -> String {
+    match record.rdata() {
+        RData::A(v) => v.to_string(),
+        RData::AAAA(v) => v.to_string(),
+        RData::ANAME(v) => v.to_string(),
+        //RData::CAA(v) => ,
+        RData::CNAME(v) => v.to_string(),
+        RData::MX(v) => format!("{} {}", v.preference(), v.exchange()),
+        //RData::NAPTR(v) => ,
+        RData::NS(v) => v.to_string(),
+        //RData::NULL(v) =>  ,
+        //RData::OPENPGPKEY(v) => ,
+        //RData::OPT(v) => ,
+        RData::PTR(v) => v.to_string(),
+        //RData::SOA(v) => ,
+        RData::SRV(v) => format!("{} {} {} {}", v.priority(), v.weight(), v.port(), v.target()),
+        //RData::SSHFP(v) => ,
+        //RData::TLSA(v) => ,
+        //RData::TXT(v) => ,
+        _ => panic!("Unexpected result: {:?}", record),
     }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
-pub struct JsonQuestion {
+struct JsonQuestion {
     #[serde(rename = "name")]
-    pub name: String,
+    name: String,
 
     #[serde(rename = "type")]
-    pub kind: u16,
+    kind: u16,
 }
 
 impl JsonQuestion {
-    pub fn new<S>(name: S, kind: u16) -> Self
+    fn new<S>(name: S, kind: u16) -> Self
     where
         S: Into<String>,
     {
@@ -121,22 +117,22 @@ impl JsonQuestion {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
-pub struct JsonAnswer {
+struct JsonAnswer {
     #[serde(rename = "name")]
-    pub name: String,
+    name: String,
 
     #[serde(rename = "type")]
-    pub kind: u16,
+    kind: u16,
 
     #[serde(rename = "TTL")]
-    pub ttl: u32,
+    ttl: u32,
 
     #[serde(rename = "data")]
-    pub data: String,
+    data: String,
 }
 
 impl JsonAnswer {
-    pub fn new<S1, S2>(name: S1, kind: u16, ttl: u32, data: S2) -> Self
+    fn new<S1, S2>(name: S1, kind: u16, ttl: u32, data: S2) -> Self
     where
         S1: Into<String>,
         S2: Into<String>,
@@ -178,7 +174,7 @@ pub struct JsonResponse {
 }
 
 impl JsonResponse {
-    pub fn new(
+    fn new(
         status: u16,
         truncated: bool,
         recursion_desired: bool,
@@ -218,7 +214,7 @@ impl ResponseEncoderWire {
     ///
     ///
     ///
-    pub fn encode(&self, _req: &DohRequest, res: &DnsResponse) -> DonutResult<Vec<u8>> {
+    pub fn encode(&self, res: &DnsResponse) -> DonutResult<Vec<u8>> {
         Ok(res.to_bytes()?)
     }
 }

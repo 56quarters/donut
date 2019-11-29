@@ -78,7 +78,7 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
 
             eprintln!("RESULT: {:?}", result);
 
-            let body = match context.json_encoder.encode(&params, &result) {
+            let body = match context.json_encoder.encode(&result) {
                 Ok(v) => v,
                 Err(e) => {
                     eprintln!("ERROR: {:?}", e);
@@ -116,7 +116,7 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
 
             eprintln!("RESULT: {:?}", result);
 
-            let body = match context.wire_encoder.encode(&params, &result) {
+            let body = match context.wire_encoder.encode(&result) {
                 Ok(v) => v,
                 Err(e) => {
                     eprintln!("ERROR: {:?}", e);
