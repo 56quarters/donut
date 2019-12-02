@@ -86,11 +86,27 @@ pub fn record_to_data(record: &Record) -> String {
         //RData::OPENPGPKEY(v) => ,
         //RData::OPT(v) => ,
         RData::PTR(v) => v.to_string(),
-        //RData::SOA(v) => ,
+        RData::SOA(v) => format!(
+            "{} {} {} {} {} {} {}",
+            v.mname().to_string(),
+            v.rname().to_string(),
+            v.serial(),
+            v.refresh(),
+            v.retry(),
+            v.expire(),
+            v.minimum(),
+        ),
         RData::SRV(v) => format!("{} {} {} {}", v.priority(), v.weight(), v.port(), v.target()),
         //RData::SSHFP(v) => ,
         //RData::TLSA(v) => ,
-        //RData::TXT(v) => ,
+        RData::TXT(v) => format!(
+            "\"{}\"",
+            v.txt_data()
+                .iter()
+                .flat_map(|t| String::from_utf8(t.to_vec()))
+                .collect::<Vec<String>>()
+                .concat()
+        ),
         _ => panic!("Unexpected result: {:?}", record),
     }
 }
