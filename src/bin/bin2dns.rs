@@ -16,8 +16,10 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+use std::fmt::Write;
 use tokio::prelude::*;
 use trust_dns::op::Message;
+use trust_dns::rr::Record;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -41,39 +43,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())
 }
 
-fn format_question(mes: &Message) -> String {
-    format!(
-        ";; QUESTION SECTION:\n{}",
-        mes.queries()
-            .iter()
-            .map(|q| format!("; {}\t\t{}\t{}", q.name().to_utf8(), q.query_class(), q.query_type()))
-            .collect::<Vec<String>>()
-            .join(",")
-    )
+fn format_question(buf: &mut String, mes: &Message) {
+    let _ = write!(buf, ";; QUESTION SECTION:\n");
+    for q in mes.queries() {
+        let _ = write!(
+            buf,
+            "; {}\t\t\t{}\t{}\n",
+            q.name().to_utf8(),
+            q.query_class(),
+            q.query_type()
+        );
+    }
 }
 
-fn format_answer(mes: &Message) -> String {
-    format!(
-        ";; ANSWER SECTION:\n{}",
-        mes.answers()
-            .iter()
-            .map(|a| format!(
-                "{}\t{}\t{}\t{}\t{}",
-                a.name().to_utf8(),
-                a.ttl(),
-                a.dns_class(),
-                a.record_type(),
-                donut::response::record_to_data(a),
-            ))
-            .collect::<Vec<String>>()
-            .join("\n")
-    )
+fn format_authority(buf: &mut String, mes: &Message) {
+    let _ = write!(buf, "\n;; AUTHORITY SECTION:\n");
+    format_records(buf, mes.name_servers());
 }
 
-fn format_query_info(mes: &Message) -> String {
-    unimplemented!();
+fn format_answer(buf: &mut String, mes: &Message) {
+    let _ = write!(buf, "\n;; ANSWER SECTION:\n");
+    format_records(buf, mes.answers());
+}
+
+fn format_records(buf: &mut String, records: &[Record]) {
+    for r in records {
+        let _ = write!(
+            buf,
+            "{}\t\t{}\t{}\t{}\t{}\n",
+            r.name().to_utf8(),
+            r.ttl(),
+            r.dns_class(),
+            r.record_type(),
+            donut::response::record_to_data(r),
+        );
+    }
 }
 
 fn format_message(mes: &Message) -> String {
-    format!("{}\n\n{}", format_question(mes), format_answer(mes))
+    let mut buf = String::new();
+    format_question(&mut buf, mes);
+
+    if mes.answer_count() > 0 {
+        format_answer(&mut buf, mes);
+    } else {
+        format_authority(&mut buf, mes)
+    }
+
+    buf
 }
