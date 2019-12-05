@@ -43,7 +43,7 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
     App::new("Donut DNS over HTTPS server")
         .version(crate_version!())
         .set_term_width(MAX_TERM_WIDTH)
-        .about("\nBlah blah blah")
+        .about("\nHTTP server for DNS-over-HTTPS lookups (binary and JSON)")
         .arg(
             Arg::with_name("upstream-udp")
                 .long("upstream-udp")
