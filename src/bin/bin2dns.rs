@@ -16,13 +16,28 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+use clap::{crate_version, App, ArgMatches};
+use std::env;
 use std::fmt::Write;
 use tokio::prelude::*;
 use trust_dns::op::Message;
 use trust_dns::rr::Record;
 
+const MAX_TERM_WIDTH: usize = 72;
+
+fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
+    App::new("Donut binary to text util")
+        .version(crate_version!())
+        .set_term_width(MAX_TERM_WIDTH)
+        .about("\nConvert binary DNS responses to a dig-like text format")
+        .get_matches_from(args)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let args: Vec<String> = env::args().collect();
+    let _ = parse_cli_opts(args);
+
     let mut buf = Vec::new();
     let mut stdin = tokio::io::stdin();
     let read = stdin.read_to_end(&mut buf).await?;
