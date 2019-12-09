@@ -25,6 +25,7 @@ use trust_dns::rr::{RData, Record};
 ///
 ///
 ///
+#[derive(Debug, Default, Clone)]
 pub struct ResponseEncoderJson;
 
 impl ResponseEncoderJson {
@@ -190,6 +191,7 @@ pub struct JsonResponse {
 }
 
 impl JsonResponse {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         status: u16,
         truncated: bool,
@@ -216,7 +218,7 @@ impl JsonResponse {
 ///
 ///
 ///
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct ResponseEncoderWire;
 
 impl ResponseEncoderWire {

@@ -23,7 +23,7 @@ use trust_dns::proto::op::Message;
 use trust_dns::proto::serialize::binary::BinDecodable;
 use trust_dns::rr::{Name, RecordType};
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct RequestParserJsonGet;
 
 impl RequestParserJsonGet {
@@ -88,7 +88,7 @@ impl RequestParserJsonGet {
 ///
 ///
 ///
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct RequestParserWireGet;
 
 impl RequestParserWireGet {
@@ -126,7 +126,7 @@ impl RequestParserWireGet {
 ///
 ///
 ///
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct RequestParserWirePost;
 
 impl RequestParserWirePost {

@@ -68,7 +68,6 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
                 .and_then(|r| context.json_encoder.encode(r))
                 .await
         }
-
         (&Method::GET, "/dns-query", Some(WIRE_MESSAGE_FORMAT)) => {
             context
                 .get_parser
@@ -77,11 +76,9 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
                 .and_then(|r| context.wire_encoder.encode(r))
                 .await
         }
-
         (&Method::POST, "/dns-query", Some(WIRE_MESSAGE_FORMAT)) => {
             panic!("POST not implemented yet");
         }
-
         _ => return Ok(http_error_no_body(StatusCode::BAD_REQUEST)),
     };
 
