@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Some(Err(e)) => e.exit(),
         None => SocketAddr::from(DEFAULT_UPSTREAM_UDP),
     };
-    let context = Arc::new(new_handler_context(upstream.clone()));
+    let context = Arc::new(new_handler_context(upstream));
 
     let service = make_service_fn(move |_| {
         let context = context.clone();

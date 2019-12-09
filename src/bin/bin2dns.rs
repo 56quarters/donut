@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut stdin = tokio::io::stdin();
     let read = stdin.read_to_end(&mut buf).await?;
     if read == 0 {
-        eprintln!("error: empty payload, {} bytes read", read);
+        eprintln!("read error: empty payload, {} bytes read", read);
         return Ok(());
     }
 
