@@ -45,7 +45,7 @@ impl UdpResolver {
     ///
     ///
     ///
-    pub async fn resolve(&self, req: &DohRequest) -> DonutResult<DnsResponse> {
+    pub fn resolve(&self, req: &DohRequest) -> DonutResult<DnsResponse> {
         Ok(self.backend.query(&req.name, DNSClass::IN, req.kind)?)
     }
 }

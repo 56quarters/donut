@@ -19,7 +19,8 @@
 use crate::request::{RequestParserJsonGet, RequestParserWireGet};
 use crate::resolve::UdpResolver;
 use crate::response::{ResponseEncoderJson, ResponseEncoderWire};
-use hyper::header::{HeaderValue, ACCEPT, CONTENT_TYPE};
+use crate::types::DonutError;
+use hyper::header::{ACCEPT, CONTENT_TYPE};
 use hyper::{Body, Method, Request, Response, StatusCode};
 use std::sync::Arc;
 
@@ -53,90 +54,47 @@ impl HandlerContext {
 }
 
 pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Result<Response<Body>, hyper::Error> {
-    // TODO: Match on Accept header to pick between wire / json format
-    // TODO: Less copy/paste
-    // TODO: tool to read from stdin and parse DNS response as text
-    match (req.method(), req.uri().path()) {
-        (&Method::GET, "/dns-json") => {
-            let params = match context.json_parser.parse(&req) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("ERROR: {:?}", e);
-                    return Ok(http_error_no_body(StatusCode::BAD_REQUEST));
-                }
-            };
+    let method = req.method();
+    let path = req.uri().path();
+    let accept = req.headers().get(ACCEPT).and_then(|a| a.to_str().ok());
 
-            eprintln!("PARAMS: {:?}", params);
+    let bytes = match (method, path, accept) {
+        (&Method::GET, "/dns-query", Some(JSON_MESSAGE_FORMAT)) => context
+            .json_parser
+            .parse(&req)
+            .and_then(|r| context.resolver.resolve(&r))
+            .and_then(|r| context.json_encoder.encode(&r)),
 
-            let result = match context.resolver.resolve(&params).await {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("ERROR: {:?}", e);
-                    return Ok(http_error_no_body(StatusCode::INTERNAL_SERVER_ERROR));
-                }
-            };
+        (&Method::GET, "/dns-query", Some(WIRE_MESSAGE_FORMAT)) => context
+            .get_parser
+            .parse(&req)
+            .and_then(|r| context.resolver.resolve(&r))
+            .and_then(|r| context.wire_encoder.encode(&r)),
 
-            eprintln!("RESULT: {:?}", result);
-
-            let body = match context.json_encoder.encode(&result) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("ERROR: {:?}", e);
-                    return Ok(http_error_no_body(StatusCode::INTERNAL_SERVER_ERROR));
-                }
-            };
-
-            let response = Response::builder()
-                .status(StatusCode::OK)
-                .header(CONTENT_TYPE, JSON_MESSAGE_FORMAT)
-                .body(Body::from(body))
-                .unwrap();
-
-            Ok(response)
+        (&Method::POST, "/dns-query", Some(WIRE_MESSAGE_FORMAT)) => {
+            panic!("POST not implemented yet");
         }
 
-        (&Method::GET, "/dns-query") => {
-            let params = match context.get_parser.parse(&req) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("ERROR: {:?}", e);
-                    return Ok(http_error_no_body(StatusCode::BAD_REQUEST));
-                }
-            };
+        _ => return Ok(http_error_no_body(StatusCode::BAD_REQUEST)),
+    };
 
-            eprintln!("PARAMS: {:?}", params);
-
-            let result = match context.resolver.resolve(&params).await {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("ERROR: {:?}", e);
-                    return Ok(http_error_no_body(StatusCode::INTERNAL_SERVER_ERROR));
-                }
-            };
-
-            eprintln!("RESULT: {:?}", result);
-
-            let body = match context.wire_encoder.encode(&result) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("ERROR: {:?}", e);
-                    return Ok(http_error_no_body(StatusCode::INTERNAL_SERVER_ERROR));
-                }
-            };
-
-            let response = Response::builder()
+    Ok(bytes
+        .map(|b| {
+            Response::builder()
                 .status(StatusCode::OK)
-                .header(CONTENT_TYPE, WIRE_MESSAGE_FORMAT)
-                .body(Body::from(body))
-                .unwrap();
+                .header(CONTENT_TYPE, accept.unwrap())
+                .body(Body::from(b))
+                .unwrap()
+        })
+        .unwrap_or_else(|e| {
+            eprintln!("error: {}", e);
+            let status_code = match e {
+                DonutError::InvalidInputStr(_) | DonutError::InvalidInputString(_) => StatusCode::BAD_REQUEST,
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            };
 
-            Ok(response)
-        }
-
-        (&Method::POST, _) => Ok(http_error_no_body(StatusCode::METHOD_NOT_ALLOWED)),
-
-        _ => Ok(http_error_no_body(StatusCode::NOT_FOUND)),
-    }
+            http_error_no_body(status_code)
+        }))
 }
 
 fn http_error_no_body(code: StatusCode) -> Response<Body> {

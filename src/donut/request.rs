@@ -72,7 +72,7 @@ impl RequestParserJsonGet {
             // Attempt to parse the input string as a number (1..65535)
             .parse::<u16>()
             .ok()
-            .map(|i| RecordType::from(i))
+            .map(RecordType::from)
             .and_then(|r| match r {
                 // Filter out the "unknown" variant that parsing yields
                 RecordType::Unknown(_) => None,
@@ -110,8 +110,8 @@ impl RequestParserWireGet {
         let message = params
             .get("dns")
             .ok_or_else(|| DonutError::InvalidInputStr("missing dns field"))
-            .and_then(|d| base64::decode_config(d, base64::URL_SAFE_NO_PAD).map_err(|e| DonutError::from(e)))
-            .and_then(|b| Message::from_bytes(&b).map_err(|e| DonutError::from(e)))?;
+            .and_then(|d| base64::decode_config(d, base64::URL_SAFE_NO_PAD).map_err(DonutError::from))
+            .and_then(|b| Message::from_bytes(&b).map_err(DonutError::from))?;
 
         let (name, kind) = message
             .queries()

@@ -16,6 +16,8 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+#![feature(async_closure)]
+
 pub mod http;
 pub mod request;
 pub mod resolve;
