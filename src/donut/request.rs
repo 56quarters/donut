@@ -31,7 +31,7 @@ impl RequestParserJsonGet {
         RequestParserJsonGet
     }
 
-    pub fn parse(&self, req: &Request<Body>) -> DonutResult<DohRequest> {
+    pub async fn parse(&self, req: &Request<Body>) -> DonutResult<DohRequest> {
         let qs = req.uri().query().unwrap_or("").to_string();
         let query = url::form_urlencoded::parse(qs.as_bytes());
         let params: HashMap<String, String> = query.into_owned().collect();
@@ -102,7 +102,7 @@ impl RequestParserWireGet {
     ///
     ///
     ///
-    pub fn parse(&self, req: &Request<Body>) -> DonutResult<DohRequest> {
+    pub async fn parse(&self, req: &Request<Body>) -> DonutResult<DohRequest> {
         let qs = req.uri().query().unwrap_or("").to_string();
         let query = url::form_urlencoded::parse(qs.as_bytes());
         let params: HashMap<String, String> = query.into_owned().collect();
@@ -140,7 +140,7 @@ impl RequestParserWirePost {
     ///
     ///
     ///
-    pub fn parse(&self, req: &Request<Body>) -> DonutResult<DohRequest> {
+    pub async fn parse(&self, req: &Request<Body>) -> DonutResult<DohRequest> {
         unimplemented!();
     }
 }

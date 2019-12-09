@@ -38,7 +38,7 @@ impl ResponseEncoderJson {
     ///
     ///
     ///
-    pub fn encode(&self, res: &DnsResponse) -> DonutResult<Vec<u8>> {
+    pub async fn encode(&self, res: DnsResponse) -> DonutResult<Vec<u8>> {
         let questions: Vec<JsonQuestion> = res
             .queries()
             .iter()
@@ -230,7 +230,7 @@ impl ResponseEncoderWire {
     ///
     ///
     ///
-    pub fn encode(&self, res: &DnsResponse) -> DonutResult<Vec<u8>> {
+    pub async fn encode(&self, res: DnsResponse) -> DonutResult<Vec<u8>> {
         Ok(res.to_bytes()?)
     }
 }

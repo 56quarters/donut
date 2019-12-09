@@ -20,6 +20,7 @@ use crate::request::{RequestParserJsonGet, RequestParserWireGet};
 use crate::resolve::UdpResolver;
 use crate::response::{ResponseEncoderJson, ResponseEncoderWire};
 use crate::types::DonutError;
+use futures_util::TryFutureExt;
 use hyper::header::{ACCEPT, CONTENT_TYPE};
 use hyper::{Body, Method, Request, Response, StatusCode};
 use std::sync::Arc;
@@ -59,17 +60,23 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
     let accept = req.headers().get(ACCEPT).and_then(|a| a.to_str().ok());
 
     let bytes = match (method, path, accept) {
-        (&Method::GET, "/dns-query", Some(JSON_MESSAGE_FORMAT)) => context
-            .json_parser
-            .parse(&req)
-            .and_then(|r| context.resolver.resolve(&r))
-            .and_then(|r| context.json_encoder.encode(&r)),
+        (&Method::GET, "/dns-query", Some(JSON_MESSAGE_FORMAT)) => {
+            context
+                .json_parser
+                .parse(&req)
+                .and_then(|r| context.resolver.resolve(r))
+                .and_then(|r| context.json_encoder.encode(r))
+                .await
+        }
 
-        (&Method::GET, "/dns-query", Some(WIRE_MESSAGE_FORMAT)) => context
-            .get_parser
-            .parse(&req)
-            .and_then(|r| context.resolver.resolve(&r))
-            .and_then(|r| context.wire_encoder.encode(&r)),
+        (&Method::GET, "/dns-query", Some(WIRE_MESSAGE_FORMAT)) => {
+            context
+                .get_parser
+                .parse(&req)
+                .and_then(|r| context.resolver.resolve(r))
+                .and_then(|r| context.wire_encoder.encode(r))
+                .await
+        }
 
         (&Method::POST, "/dns-query", Some(WIRE_MESSAGE_FORMAT)) => {
             panic!("POST not implemented yet");
