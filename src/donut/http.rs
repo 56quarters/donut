@@ -16,7 +16,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use crate::request::{RequestParserJsonGet, RequestParserWireGet};
+use crate::request::{RequestParserJsonGet, RequestParserWireGet, RequestParserWirePost};
 use crate::resolve::UdpResolver;
 use crate::response::{ResponseEncoderJson, ResponseEncoderWire};
 use crate::types::DonutError;
@@ -31,6 +31,7 @@ const JSON_MESSAGE_FORMAT: &str = "application/dns-json";
 pub struct HandlerContext {
     json_parser: RequestParserJsonGet,
     get_parser: RequestParserWireGet,
+    post_parser: RequestParserWirePost,
     resolver: UdpResolver,
     json_encoder: ResponseEncoderJson,
     wire_encoder: ResponseEncoderWire,
@@ -40,6 +41,7 @@ impl HandlerContext {
     pub fn new(
         json_parser: RequestParserJsonGet,
         get_parser: RequestParserWireGet,
+        post_parser: RequestParserWirePost,
         resolver: UdpResolver,
         json_encoder: ResponseEncoderJson,
         wire_encoder: ResponseEncoderWire,
@@ -47,6 +49,7 @@ impl HandlerContext {
         HandlerContext {
             json_parser,
             get_parser,
+            post_parser,
             resolver,
             json_encoder,
             wire_encoder,
@@ -77,7 +80,12 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
                 .await
         }
         (&Method::POST, "/dns-query", Some(WIRE_MESSAGE_FORMAT)) => {
-            panic!("POST not implemented yet");
+            context
+                .post_parser
+                .parse(&req)
+                .and_then(|r| context.resolver.resolve(r))
+                .and_then(|r| context.wire_encoder.encode(r))
+                .await
         }
         _ => return Ok(http_error_no_body(StatusCode::BAD_REQUEST)),
     };

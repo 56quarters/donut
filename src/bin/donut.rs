@@ -18,7 +18,7 @@
 
 use clap::{crate_version, value_t, App, Arg, ArgMatches};
 use donut::http::{http_route, HandlerContext};
-use donut::request::{RequestParserJsonGet, RequestParserWireGet};
+use donut::request::{RequestParserJsonGet, RequestParserWireGet, RequestParserWirePost};
 use donut::resolve::UdpResolver;
 use donut::response::{ResponseEncoderJson, ResponseEncoderWire};
 use hyper::service::{make_service_fn, service_fn};
@@ -66,10 +66,18 @@ fn new_handler_context(addr: SocketAddr) -> HandlerContext {
     let resolver = UdpResolver::new(client);
     let json_parser = RequestParserJsonGet::new();
     let get_parser = RequestParserWireGet::new();
+    let post_parser = RequestParserWirePost::new();
     let json_encoder = ResponseEncoderJson::new();
     let wire_encoder = ResponseEncoderWire::new();
 
-    HandlerContext::new(json_parser, get_parser, resolver, json_encoder, wire_encoder)
+    HandlerContext::new(
+        json_parser,
+        get_parser,
+        post_parser,
+        resolver,
+        json_encoder,
+        wire_encoder,
+    )
 }
 
 fn get_upstream(matches: &ArgMatches, param: &str) -> Option<Result<SocketAddr, clap::Error>> {
