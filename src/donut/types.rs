@@ -28,16 +28,16 @@ pub type DonutResult<T> = Result<T, DonutError>;
 
 #[derive(Debug, Fail)]
 pub enum DonutError {
-    #[fail(display = "{}", _0)]
+    #[fail(display = "io error: {}", _0)]
     IoError(#[cause] io::Error),
 
-    #[fail(display = "{}", _0)]
+    #[fail(display = "base64 error: {}", _0)]
     Base64Error(#[cause] DecodeError),
 
-    #[fail(display = "{}", _0)]
+    #[fail(display = "dns client error: {}", _0)]
     DnsClientError(#[cause] DnsClientError),
 
-    #[fail(display = "{}", _0)]
+    #[fail(display = "dns parse error: {}", _0)]
     DnsParseError(#[cause] DnsParseError),
 
     #[fail(display = "invalid input: {}", _0)]
@@ -46,7 +46,7 @@ pub enum DonutError {
     #[fail(display = "invalid input: {}", _0)]
     InvalidInputString(String),
 
-    #[fail(display = "{}", _0)]
+    #[fail(display = "serialization error: {}", _0)]
     SerializationError(#[cause] SerdeError),
 }
 
