@@ -17,6 +17,7 @@
 //
 
 use crate::types::{DohRequest, DonutError, DonutResult};
+use futures_util::{future, TryStreamExt};
 use hyper::{Body, Request};
 use std::collections::HashMap;
 use trust_dns::proto::op::Message;
@@ -31,7 +32,7 @@ impl RequestParserJsonGet {
         RequestParserJsonGet
     }
 
-    pub async fn parse(&self, req: &Request<Body>) -> DonutResult<DohRequest> {
+    pub async fn parse(&self, req: Request<Body>) -> DonutResult<DohRequest> {
         let qs = req.uri().query().unwrap_or("").to_string();
         let query = url::form_urlencoded::parse(qs.as_bytes());
         let params: HashMap<String, String> = query.into_owned().collect();
@@ -102,7 +103,7 @@ impl RequestParserWireGet {
     ///
     ///
     ///
-    pub async fn parse(&self, req: &Request<Body>) -> DonutResult<DohRequest> {
+    pub async fn parse(&self, req: Request<Body>) -> DonutResult<DohRequest> {
         let qs = req.uri().query().unwrap_or("").to_string();
         let query = url::form_urlencoded::parse(qs.as_bytes());
         let params: HashMap<String, String> = query.into_owned().collect();
@@ -113,15 +114,12 @@ impl RequestParserWireGet {
             .and_then(|d| base64::decode_config(d, base64::URL_SAFE_NO_PAD).map_err(DonutError::from))
             .and_then(|b| Message::from_bytes(&b).map_err(DonutError::from))?;
 
-        let (name, kind) = message
-            .queries()
-            .first()
-            .map(|q| (q.name().clone(), q.query_type()))
-            .ok_or_else(|| DonutError::InvalidInputStr("missing question"))?;
-
+        let (name, kind) = question_from_message(&message)?;
         Ok(DohRequest::new(name, kind, message.checking_disabled(), false))
     }
 }
+
+const MAX_POST_SIZE: usize = 4096;
 
 ///
 ///
@@ -140,7 +138,32 @@ impl RequestParserWirePost {
     ///
     ///
     ///
-    pub async fn parse(&self, req: &Request<Body>) -> DonutResult<DohRequest> {
-        unimplemented!();
+    pub async fn parse(&self, req: Request<Body>) -> DonutResult<DohRequest> {
+        let bytes = read_from_body(req.into_body(), MAX_POST_SIZE).await?;
+        let message = Message::from_bytes(&bytes).map_err(DonutError::from)?;
+        let (name, kind) = question_from_message(&message)?;
+        Ok(DohRequest::new(name, kind, message.checking_disabled(), false))
     }
+}
+
+fn question_from_message(message: &Message) -> DonutResult<(Name, RecordType)> {
+    message
+        .queries()
+        .first()
+        .map(|q| (q.name().clone(), q.query_type()))
+        .ok_or_else(|| DonutError::InvalidInputStr("missing question"))
+}
+
+async fn read_from_body(body: Body, n: usize) -> DonutResult<Vec<u8>> {
+    body.map_err(|e| DonutError::InvalidInputStr("wat"))
+        .try_fold(Vec::new(), |mut acc, chunk| {
+            if chunk.len() + acc.len() > n {
+                panic!("TOO LONG!");
+            }
+
+            println!("Chunk size: {}", chunk.len());
+            acc.extend_from_slice(&*chunk.into_bytes());
+            future::ready(Ok(acc))
+        })
+        .await
 }

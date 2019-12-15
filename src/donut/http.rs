@@ -58,43 +58,56 @@ impl HandlerContext {
 }
 
 pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Result<Response<Body>, hyper::Error> {
-    let method = req.method();
-    let path = req.uri().path();
-    let accept = req.headers().get(ACCEPT).and_then(|a| a.to_str().ok());
+    // Copy all the request attributes we're matching on so that we can pass ownership
+    // of the request into each parsing method (required for the POST parser since it
+    // reads the body as a stream).
+    let method = req.method().clone();
+    let path = req.uri().path().to_owned();
+    let accept = req
+        .headers()
+        .get(ACCEPT)
+        .and_then(|a| a.to_str().ok())
+        .unwrap_or("")
+        .to_owned();
 
-    let bytes = match (method, path, accept) {
-        (&Method::GET, "/dns-query", Some(JSON_MESSAGE_FORMAT)) => {
+    let bytes = match (method, path.as_ref(), accept.as_ref()) {
+        (Method::GET, "/dns-query", JSON_MESSAGE_FORMAT) => {
             context
                 .json_parser
-                .parse(&req)
+                .parse(req)
                 .and_then(|r| context.resolver.resolve(r))
                 .and_then(|r| context.json_encoder.encode(r))
                 .await
         }
-        (&Method::GET, "/dns-query", Some(WIRE_MESSAGE_FORMAT)) => {
+        (Method::GET, "/dns-query", WIRE_MESSAGE_FORMAT) => {
             context
                 .get_parser
-                .parse(&req)
+                .parse(req)
                 .and_then(|r| context.resolver.resolve(r))
                 .and_then(|r| context.wire_encoder.encode(r))
                 .await
         }
-        (&Method::POST, "/dns-query", Some(WIRE_MESSAGE_FORMAT)) => {
+        (Method::POST, "/dns-query", WIRE_MESSAGE_FORMAT) => {
             context
                 .post_parser
-                .parse(&req)
+                .parse(req)
                 .and_then(|r| context.resolver.resolve(r))
                 .and_then(|r| context.wire_encoder.encode(r))
                 .await
         }
-        _ => return Ok(http_error_no_body(StatusCode::BAD_REQUEST)),
+
+        // 400 for the correct path but an invalid Accept value
+        (_, "/dns-query", _) => return Ok(http_error_no_body(StatusCode::BAD_REQUEST)),
+
+        // 404 for everything else
+        _ => return Ok(http_error_no_body(StatusCode::NOT_FOUND)),
     };
 
     Ok(bytes
         .map(|b| {
             Response::builder()
                 .status(StatusCode::OK)
-                .header(CONTENT_TYPE, accept.unwrap())
+                .header(CONTENT_TYPE, accept)
                 .body(Body::from(b))
                 .unwrap()
         })
