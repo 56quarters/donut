@@ -18,6 +18,7 @@
 
 use base64::DecodeError;
 use failure::Fail;
+use hyper::Error as HyperError;
 use serde_json::Error as SerdeError;
 use std::io;
 use trust_dns::error::{ClientError as DnsClientError, ParseError as DnsParseError};
@@ -26,6 +27,9 @@ use trust_dns::rr::{Name, RecordType};
 
 pub type DonutResult<T> = Result<T, DonutError>;
 
+
+// TODO: Make this an inner impl or something
+//  add methods to the wrapper for is_client_error() is_internal_error() etc
 #[derive(Debug, Fail)]
 pub enum DonutError {
     #[fail(display = "io error: {}", _0)]
@@ -39,6 +43,9 @@ pub enum DonutError {
 
     #[fail(display = "dns parse error: {}", _0)]
     DnsParseError(#[cause] DnsParseError),
+
+    #[fail(display = "http error: {}", _0)]
+    HttpError(#[cause] HyperError),
 
     #[fail(display = "invalid input: {}", _0)]
     InvalidInputStr(&'static str),
@@ -77,6 +84,12 @@ impl From<DnsParseError> for DonutError {
 impl From<DnsProtoError> for DonutError {
     fn from(e: DnsProtoError) -> Self {
         DonutError::DnsParseError(DnsParseError::from(e))
+    }
+}
+
+impl From<HyperError> for DonutError {
+    fn from(e: HyperError) -> Self {
+        DonutError::HttpError(e)
     }
 }
 

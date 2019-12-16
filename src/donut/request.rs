@@ -24,6 +24,8 @@ use trust_dns::proto::op::Message;
 use trust_dns::proto::serialize::binary::BinDecodable;
 use trust_dns::rr::{Name, RecordType};
 
+const MAX_POST_SIZE: usize = 4096;
+
 #[derive(Debug, Default, Clone)]
 pub struct RequestParserJsonGet;
 
@@ -119,27 +121,33 @@ impl RequestParserWireGet {
     }
 }
 
-const MAX_POST_SIZE: usize = 4096;
+///
+///
+///
+#[derive(Debug, Clone)]
+pub struct RequestParserWirePost {
+    max_size: usize,
+}
 
-///
-///
-///
-#[derive(Debug, Default, Clone)]
-pub struct RequestParserWirePost;
+impl Default for RequestParserWirePost {
+    fn default() -> Self {
+        Self::new(MAX_POST_SIZE)
+    }
+}
 
 impl RequestParserWirePost {
     ///
     ///
     ///
-    pub fn new() -> Self {
-        RequestParserWirePost
+    pub fn new(max_size: usize) -> Self {
+        RequestParserWirePost { max_size }
     }
 
     ///
     ///
     ///
     pub async fn parse(&self, req: Request<Body>) -> DonutResult<DohRequest> {
-        let bytes = read_from_body(req.into_body(), MAX_POST_SIZE).await?;
+        let bytes = read_from_body(req.into_body(), self.max_size).await?;
         let message = Message::from_bytes(&bytes).map_err(DonutError::from)?;
         let (name, kind) = question_from_message(&message)?;
         Ok(DohRequest::new(name, kind, message.checking_disabled(), false))
@@ -155,15 +163,14 @@ fn question_from_message(message: &Message) -> DonutResult<(Name, RecordType)> {
 }
 
 async fn read_from_body(body: Body, n: usize) -> DonutResult<Vec<u8>> {
-    body.map_err(|e| DonutError::InvalidInputStr("wat"))
+    body.map_err(DonutError::from)
         .try_fold(Vec::new(), |mut acc, chunk| {
             if chunk.len() + acc.len() > n {
-                panic!("TOO LONG!");
+                return future::err(DonutError::InvalidInputStr("body too long"));
             }
 
-            println!("Chunk size: {}", chunk.len());
             acc.extend_from_slice(&*chunk.into_bytes());
-            future::ready(Ok(acc))
+            future::ok(acc)
         })
         .await
 }

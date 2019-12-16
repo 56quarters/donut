@@ -64,11 +64,11 @@ fn new_handler_context(addr: SocketAddr) -> HandlerContext {
     let client = SyncClient::new(conn);
 
     let resolver = UdpResolver::new(client);
-    let json_parser = RequestParserJsonGet::new();
-    let get_parser = RequestParserWireGet::new();
-    let post_parser = RequestParserWirePost::new();
-    let json_encoder = ResponseEncoderJson::new();
-    let wire_encoder = ResponseEncoderWire::new();
+    let json_parser = RequestParserJsonGet::default();
+    let get_parser = RequestParserWireGet::default();
+    let post_parser = RequestParserWirePost::default();
+    let json_encoder = ResponseEncoderJson::default();
+    let wire_encoder = ResponseEncoderWire::default();
 
     HandlerContext::new(
         json_parser,
