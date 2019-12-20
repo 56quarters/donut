@@ -21,7 +21,10 @@ use failure::{Backtrace, Fail};
 use hyper::Error as HyperError;
 use serde_json::Error as SerdeError;
 use std::fmt;
-use trust_dns::error::{ClientError as DnsClientError, ParseError as DnsParseError};
+use trust_dns::error::{
+    ClientError as DnsClientError, ClientErrorKind as DnsClientErrorKind, ParseError as DnsParseError,
+    ParseErrorKind as DnsParseErrorKind,
+};
 use trust_dns::proto::error::ProtoError as DnsProtoError;
 use trust_dns::rr::{Name, RecordType};
 
@@ -58,8 +61,14 @@ impl DonutError {
     pub fn kind(&self) -> ErrorKind {
         match &self.repr {
             ErrorRepr::Base64Error(_) => ErrorKind::InputSerialization,
-            ErrorRepr::DnsClientError(_) => ErrorKind::DnsTimeout,
-            ErrorRepr::DnsParseError(_) => ErrorKind::DnsProtocol,
+            ErrorRepr::DnsClientError(ref e) => match e.kind() {
+                DnsClientErrorKind::Timeout => ErrorKind::DnsTimeout,
+                _ => ErrorKind::DnsProtocol,
+            },
+            ErrorRepr::DnsParseError(ref e) => match e.kind() {
+                DnsParseErrorKind::Timeout => ErrorKind::DnsTimeout,
+                _ => ErrorKind::DnsProtocol,
+            },
             ErrorRepr::HyperError(_) => ErrorKind::HttpProtocol,
             ErrorRepr::SerializationError(_) => ErrorKind::OutputSerialization,
             ErrorRepr::WithMessageStr(kind, _) => *kind,
