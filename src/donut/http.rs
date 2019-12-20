@@ -112,7 +112,7 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
                 .unwrap()
         })
         .unwrap_or_else(|e| {
-            eprintln!("error: {}", e);
+            eprintln!("error: {:?}", e);
             let status_code = match e.kind() {
                 ErrorKind::InputParsing | ErrorKind::InputSerialization => StatusCode::BAD_REQUEST,
                 ErrorKind::InputLength => StatusCode::PAYLOAD_TOO_LARGE,
