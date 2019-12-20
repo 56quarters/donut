@@ -17,7 +17,6 @@
 //
 
 use base64::DecodeError;
-use failure::_core::fmt::{Error, Formatter};
 use failure::{Backtrace, Fail};
 use hyper::Error as HyperError;
 use serde_json::Error as SerdeError;
@@ -70,7 +69,7 @@ impl DonutError {
 }
 
 impl fmt::Display for DonutError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self.repr {
             ErrorRepr::Base64Error(ref e) => e.fmt(f),
             ErrorRepr::DnsClientError(ref e) => e.fmt(f),
