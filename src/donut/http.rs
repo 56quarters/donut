@@ -19,7 +19,7 @@
 use crate::request::{RequestParserJsonGet, RequestParserWireGet, RequestParserWirePost};
 use crate::resolve::UdpResolver;
 use crate::response::{ResponseEncoderJson, ResponseEncoderWire};
-use crate::types::DonutError;
+use crate::types::ErrorKind;
 use futures_util::TryFutureExt;
 use hyper::header::{ACCEPT, CONTENT_TYPE};
 use hyper::{Body, Method, Request, Response, StatusCode};
@@ -113,8 +113,9 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
         })
         .unwrap_or_else(|e| {
             eprintln!("error: {}", e);
-            let status_code = match e {
-                DonutError::InvalidInputStr(_) | DonutError::InvalidInputString(_) => StatusCode::BAD_REQUEST,
+            let status_code = match e.kind() {
+                ErrorKind::InputParsing | ErrorKind::InputSerialization => StatusCode::BAD_REQUEST,
+                ErrorKind::InputLength => StatusCode::PAYLOAD_TOO_LARGE,
                 _ => StatusCode::INTERNAL_SERVER_ERROR,
             };
 

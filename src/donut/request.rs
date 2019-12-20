@@ -16,7 +16,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use crate::types::{DohRequest, DonutError, DonutResult};
+use crate::types::{DohRequest, DonutError, DonutResult, ErrorKind};
 use futures_util::{future, TryStreamExt};
 use hyper::{Body, Request};
 use std::collections::HashMap;
@@ -41,11 +41,11 @@ impl RequestParserJsonGet {
 
         let name = params
             .get("name")
-            .ok_or_else(|| DonutError::InvalidInputStr("missing query name"))
+            .ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "missing query name")))
             .and_then(|s| Self::parse_query_name(s))?;
         let kind = params
             .get("type")
-            .ok_or_else(|| DonutError::InvalidInputStr("missing query type"))
+            .ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "missing query type")))
             .and_then(|s| Self::parse_requery_type(s))?;
         let dnssec_data = params
             .get("do")
@@ -64,7 +64,7 @@ impl RequestParserJsonGet {
     ///
     fn parse_query_name(name: &str) -> DonutResult<Name> {
         name.parse()
-            .map_err(|_| DonutError::InvalidInputStr("invalid query name"))
+            .map_err(|_| DonutError::from((ErrorKind::InputParsing, "invalid query name")))
     }
 
     ///
@@ -84,7 +84,7 @@ impl RequestParserJsonGet {
             // If it wasn't a number, try to parse it as a string (A, AAAA, etc).
             .or_else(|| kind.to_uppercase().parse().ok());
 
-        parsed_type.ok_or_else(|| DonutError::InvalidInputStr("invalid query type"))
+        parsed_type.ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "invalid query type")))
     }
 }
 
@@ -112,7 +112,7 @@ impl RequestParserWireGet {
 
         let message = params
             .get("dns")
-            .ok_or_else(|| DonutError::InvalidInputStr("missing dns field"))
+            .ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "missing dns field")))
             .and_then(|d| base64::decode_config(d, base64::URL_SAFE_NO_PAD).map_err(DonutError::from))
             .and_then(|b| Message::from_bytes(&b).map_err(DonutError::from))?;
 
@@ -159,14 +159,14 @@ fn question_from_message(message: &Message) -> DonutResult<(Name, RecordType)> {
         .queries()
         .first()
         .map(|q| (q.name().clone(), q.query_type()))
-        .ok_or_else(|| DonutError::InvalidInputStr("missing question"))
+        .ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "missing question")))
 }
 
 async fn read_from_body(body: Body, n: usize) -> DonutResult<Vec<u8>> {
     body.map_err(DonutError::from)
         .try_fold(Vec::new(), |mut acc, chunk| {
             if chunk.len() + acc.len() > n {
-                return future::err(DonutError::InvalidInputStr("body too long"));
+                return future::err(DonutError::from((ErrorKind::InputLength, "body too long")));
             }
 
             acc.extend_from_slice(&*chunk.into_bytes());
