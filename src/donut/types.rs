@@ -29,24 +29,24 @@ pub type DonutResult<T> = Result<T, DonutError>;
 
 #[derive(Debug)]
 enum ErrorRepr {
-    Base64Error(DecodeError),                // input serialization => 400
-    DnsClientError(DnsClientError),          // protocol? timeout? => 500 or 503
-    DnsParseError(DnsParseError),            // input parsing error => 400
-    HyperError(HyperError),                  // Http protocol => 500
-    SerializationError(SerdeError),          // output serialization => 500
-    WithMessageStr(ErrorKind, &'static str), // InputParsing => 400
-    WithMessageString(ErrorKind, String),    // InputParsing => 400
+    Base64Error(DecodeError),
+    DnsClientError(DnsClientError),
+    DnsParseError(DnsParseError),
+    HyperError(HyperError),
+    SerializationError(SerdeError),
+    WithMessageStr(ErrorKind, &'static str),
+    WithMessageString(ErrorKind, String),
 }
 
 #[derive(PartialEq, Eq, Debug, Hash, Clone, Copy)]
 pub enum ErrorKind {
-    DnsProtocol,         // 500
-    DnsTimeout,          // 503
-    InputLength,         // 413
-    InputParsing,        // 400
-    InputSerialization,  // 400
-    HttpProtocol,        // 500
-    OutputSerialization, // 500
+    DnsProtocol,
+    DnsTimeout,
+    InputLength,
+    InputParsing,
+    InputSerialization,
+    HttpProtocol,
+    OutputSerialization,
 }
 
 #[derive(Debug)]
