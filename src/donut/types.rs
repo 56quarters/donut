@@ -25,7 +25,7 @@ use trust_dns::error::{
     ClientError as DnsClientError, ClientErrorKind as DnsClientErrorKind, ParseError as DnsParseError,
     ParseErrorKind as DnsParseErrorKind,
 };
-use trust_dns::proto::error::ProtoError as DnsProtoError;
+use trust_dns::proto::error::{ProtoError as DnsProtoError, ProtoErrorKind as DnsProtoErrorKind};
 use trust_dns::rr::{Name, RecordType};
 
 pub type DonutResult<T> = Result<T, DonutError>;
@@ -35,7 +35,8 @@ enum ErrorRepr {
     Base64Error(DecodeError),
     DnsClientError(DnsClientError),
     DnsParseError(DnsParseError),
-    HyperError(HyperError),
+    DnsProtoError(DnsProtoError),
+    HttpError(HyperError),
     SerializationError(SerdeError),
     WithMessageStr(ErrorKind, &'static str),
     WithMessageString(ErrorKind, String),
@@ -43,12 +44,12 @@ enum ErrorRepr {
 
 #[derive(PartialEq, Eq, Debug, Hash, Clone, Copy)]
 pub enum ErrorKind {
-    DnsProtocol,
+    DnsInternal,
     DnsTimeout,
     InputLength,
     InputParsing,
     InputSerialization,
-    HttpProtocol,
+    HttpInternal,
     OutputSerialization,
 }
 
@@ -63,13 +64,17 @@ impl DonutError {
             ErrorRepr::Base64Error(_) => ErrorKind::InputSerialization,
             ErrorRepr::DnsClientError(ref e) => match e.kind() {
                 DnsClientErrorKind::Timeout => ErrorKind::DnsTimeout,
-                _ => ErrorKind::DnsProtocol,
+                _ => ErrorKind::DnsInternal,
             },
             ErrorRepr::DnsParseError(ref e) => match e.kind() {
                 DnsParseErrorKind::Timeout => ErrorKind::DnsTimeout,
-                _ => ErrorKind::DnsProtocol,
+                _ => ErrorKind::DnsInternal,
             },
-            ErrorRepr::HyperError(_) => ErrorKind::HttpProtocol,
+            ErrorRepr::DnsProtoError(ref e) => match e.kind() {
+                DnsProtoErrorKind::Timeout => ErrorKind::DnsTimeout,
+                _ => ErrorKind::DnsInternal,
+            },
+            ErrorRepr::HttpError(_) => ErrorKind::HttpInternal,
             ErrorRepr::SerializationError(_) => ErrorKind::OutputSerialization,
             ErrorRepr::WithMessageStr(kind, _) => *kind,
             ErrorRepr::WithMessageString(kind, _) => *kind,
@@ -83,7 +88,8 @@ impl fmt::Display for DonutError {
             ErrorRepr::Base64Error(ref e) => e.fmt(f),
             ErrorRepr::DnsClientError(ref e) => e.fmt(f),
             ErrorRepr::DnsParseError(ref e) => e.fmt(f),
-            ErrorRepr::HyperError(ref e) => e.fmt(f),
+            ErrorRepr::DnsProtoError(ref e) => e.fmt(f),
+            ErrorRepr::HttpError(ref e) => e.fmt(f),
             ErrorRepr::SerializationError(ref e) => e.fmt(f),
             ErrorRepr::WithMessageStr(_, msg) => msg.fmt(f),
             ErrorRepr::WithMessageString(_, ref msg) => msg.fmt(f),
@@ -97,7 +103,8 @@ impl Fail for DonutError {
             ErrorRepr::Base64Error(ref e) => e.cause(),
             ErrorRepr::DnsClientError(ref e) => e.cause(),
             ErrorRepr::DnsParseError(ref e) => e.cause(),
-            ErrorRepr::HyperError(ref e) => e.cause(),
+            ErrorRepr::DnsProtoError(ref e) => e.cause(),
+            ErrorRepr::HttpError(ref e) => e.cause(),
             ErrorRepr::SerializationError(ref e) => e.cause(),
             _ => None,
         }
@@ -108,7 +115,8 @@ impl Fail for DonutError {
             ErrorRepr::Base64Error(ref e) => e.backtrace(),
             ErrorRepr::DnsClientError(ref e) => e.backtrace(),
             ErrorRepr::DnsParseError(ref e) => e.backtrace(),
-            ErrorRepr::HyperError(ref e) => e.backtrace(),
+            ErrorRepr::DnsProtoError(ref e) => e.backtrace(),
+            ErrorRepr::HttpError(ref e) => e.backtrace(),
             ErrorRepr::SerializationError(ref e) => e.backtrace(),
             _ => None,
         }
@@ -142,7 +150,7 @@ impl From<DnsParseError> for DonutError {
 impl From<DnsProtoError> for DonutError {
     fn from(e: DnsProtoError) -> Self {
         DonutError {
-            repr: ErrorRepr::DnsParseError(DnsParseError::from(e)),
+            repr: ErrorRepr::DnsProtoError(e),
         }
     }
 }
@@ -150,7 +158,7 @@ impl From<DnsProtoError> for DonutError {
 impl From<HyperError> for DonutError {
     fn from(e: HyperError) -> Self {
         DonutError {
-            repr: ErrorRepr::HyperError(e),
+            repr: ErrorRepr::HttpError(e),
         }
     }
 }
