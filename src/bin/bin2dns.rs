@@ -33,31 +33,6 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
         .get_matches_from(args)
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let args: Vec<String> = env::args().collect();
-    let _ = parse_cli_opts(args);
-
-    let mut buf = Vec::new();
-    let mut stdin = tokio::io::stdin();
-    let read = stdin.read_to_end(&mut buf).await?;
-    if read == 0 {
-        eprintln!("read error: empty payload, {} bytes read", read);
-        return Ok(());
-    }
-
-    match Message::from_vec(&buf) {
-        Ok(v) => {
-            println!("{}", format_message(&v));
-        }
-        Err(e) => {
-            eprintln!("decoding error: {}", e);
-        }
-    }
-
-    Ok(())
-}
-
 fn format_question(buf: &mut String, mes: &Message) {
     let _ = writeln!(buf, ";; QUESTION SECTION:");
     for q in mes.queries() {
@@ -107,4 +82,29 @@ fn format_message(mes: &Message) -> String {
     }
 
     buf
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let args: Vec<String> = env::args().collect();
+    let _ = parse_cli_opts(args);
+
+    let mut buf = Vec::new();
+    let mut stdin = tokio::io::stdin();
+    let read = stdin.read_to_end(&mut buf).await?;
+    if read == 0 {
+        eprintln!("read error: empty payload, {} bytes read", read);
+        return Ok(());
+    }
+
+    match Message::from_vec(&buf) {
+        Ok(v) => {
+            println!("{}", format_message(&v));
+        }
+        Err(e) => {
+            eprintln!("decoding error: {}", e);
+        }
+    }
+
+    Ok(())
 }
