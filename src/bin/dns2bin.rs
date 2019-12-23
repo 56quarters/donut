@@ -18,7 +18,7 @@
 
 use clap::{crate_version, value_t_or_exit, App, Arg, ArgMatches};
 use std::env;
-use tokio::prelude::*;
+use std::io::{self, Write};
 use trust_dns::op::{Message, Query};
 use trust_dns::rr::{Name, RecordType};
 use trust_dns::serialize::binary::BinEncodable;
@@ -51,8 +51,7 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
         .get_matches_from(args)
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args: Vec<String> = env::args().collect();
     let matches = parse_cli_opts(args);
 
@@ -60,9 +59,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let name = value_t_or_exit!(matches, "name", Name);
     let record_type = value_t_or_exit!(matches, "type", RecordType);
 
-    let mut message = Message::new();
-    message.add_query(Query::query(name, record_type));
-    let bytes = message
+    let bytes = Message::new()
+        .add_query(Query::query(name, record_type))
         .to_bytes()
         .map(|b| {
             if !raw {
@@ -73,7 +71,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         })
         .unwrap();
 
-    let mut stdout = tokio::io::stdout();
-    let _ = stdout.write(&bytes).await;
+    let mut stdout = io::stdout();
+    stdout.write_all(&bytes)?;
+
     Ok(())
 }

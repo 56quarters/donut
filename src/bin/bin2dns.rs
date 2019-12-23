@@ -19,7 +19,7 @@
 use clap::{crate_version, App, ArgMatches};
 use std::env;
 use std::fmt::Write;
-use tokio::prelude::*;
+use std::io::{self, Read};
 use trust_dns::op::Message;
 use trust_dns::rr::Record;
 
@@ -84,14 +84,13 @@ fn format_message(mes: &Message) -> String {
     buf
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args: Vec<String> = env::args().collect();
     let _ = parse_cli_opts(args);
 
     let mut buf = Vec::new();
-    let mut stdin = tokio::io::stdin();
-    let read = stdin.read_to_end(&mut buf).await?;
+    let mut stdin = io::stdin();
+    let read = stdin.read_to_end(&mut buf)?;
     if read == 0 {
         eprintln!("read error: empty payload, {} bytes read", read);
         return Ok(());
