@@ -26,10 +26,10 @@ use trust_dns::serialize::binary::BinEncodable;
 const MAX_TERM_WIDTH: usize = 72;
 
 fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
-    App::new("Donut DNS to binary util")
+    App::new("Donut DNS request to binary util")
         .version(crate_version!())
         .set_term_width(MAX_TERM_WIDTH)
-        .about("\nOutput a DNS request in binary representation")
+        .about("\nOutput a DNS request in base64 or binary representation")
         .arg(
             Arg::with_name("raw")
                 .short("r")
@@ -69,6 +69,9 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 b
             }
         })
+        // TODO: Our error type doesn't implement Error (only Fail) and
+        // there are conflicting traits when we try (failure seems to have
+        // a default impl... but we still get type errors here with `?`).
         .unwrap();
 
     let mut stdout = io::stdout();

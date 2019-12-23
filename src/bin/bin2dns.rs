@@ -26,10 +26,10 @@ use trust_dns::rr::Record;
 const MAX_TERM_WIDTH: usize = 72;
 
 fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
-    App::new("Donut binary to text util")
+    App::new("Donut DNS binary to text util")
         .version(crate_version!())
         .set_term_width(MAX_TERM_WIDTH)
-        .about("\nConvert binary DNS responses to a dig-like text format")
+        .about("\nConvert binary DNS responses on STDIN to a dig-like text format")
         .get_matches_from(args)
 }
 
