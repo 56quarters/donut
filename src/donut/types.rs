@@ -60,7 +60,7 @@ pub struct DonutError {
 
 impl DonutError {
     pub fn kind(&self) -> ErrorKind {
-        match &self.repr {
+        match self.repr {
             ErrorRepr::Base64Error(_) => ErrorKind::InputSerialization,
             ErrorRepr::DnsClientError(ref e) => match e.kind() {
                 DnsClientErrorKind::Timeout => ErrorKind::DnsTimeout,
@@ -76,8 +76,8 @@ impl DonutError {
             },
             ErrorRepr::HttpError(_) => ErrorKind::HttpInternal,
             ErrorRepr::SerializationError(_) => ErrorKind::OutputSerialization,
-            ErrorRepr::WithMessageStr(kind, _) => *kind,
-            ErrorRepr::WithMessageString(kind, _) => *kind,
+            ErrorRepr::WithMessageStr(kind, _) => kind,
+            ErrorRepr::WithMessageString(kind, _) => kind,
         }
     }
 }
