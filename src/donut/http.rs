@@ -112,8 +112,8 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
                 method = %method,
                 path = %path,
                 accept = %accept,
-                bytes = b.len(),
                 status = 200,
+                bytes = b.len(),
             );
 
             Response::builder()
@@ -123,12 +123,22 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
                 .unwrap()
         })
         .unwrap_or_else(|e| {
-            eprintln!("error: {:?} => {}", e.kind(), e);
             let status_code = match e.kind() {
                 ErrorKind::InputParsing | ErrorKind::InputSerialization => StatusCode::BAD_REQUEST,
                 ErrorKind::InputLength => StatusCode::PAYLOAD_TOO_LARGE,
                 _ => StatusCode::INTERNAL_SERVER_ERROR,
             };
+
+            event!(
+                target: "donut_request",
+                Level::INFO,
+                method = %method,
+                path = %path,
+                accept = %accept,
+                status = status_code.as_u16(),
+                error_kind = ?e.kind(),
+                error_msg = %e,
+            );
 
             http_error_no_body(status_code)
         }))

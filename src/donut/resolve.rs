@@ -48,7 +48,7 @@ impl UdpResolver {
     ///
     pub async fn resolve(&self, req: DohRequest) -> DonutResult<DnsResponse> {
         let res = self.backend.query(&req.name, DNSClass::IN, req.kind)?;
-        let response = u16::from(res.response_code());
+        let code = res.response_code();
 
         event!(
             target: "donut_lookup",
@@ -56,7 +56,8 @@ impl UdpResolver {
             name = %req.name,
             kind = %req.kind,
             results = res.len(),
-            response = response,
+            response = u16::from(code),
+            response_msg = %code,
         );
 
         Ok(res)
