@@ -24,6 +24,7 @@ use futures_util::TryFutureExt;
 use hyper::header::{ACCEPT, CONTENT_TYPE};
 use hyper::{Body, Method, Request, Response, StatusCode};
 use std::sync::Arc;
+use tracing::{event, Level};
 
 const WIRE_MESSAGE_FORMAT: &str = "application/dns-message";
 const JSON_MESSAGE_FORMAT: &str = "application/dns-json";
@@ -70,8 +71,8 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
         .unwrap_or("")
         .to_owned();
 
-    let bytes = match (method, path.as_ref(), accept.as_ref()) {
-        (Method::GET, "/dns-query", JSON_MESSAGE_FORMAT) => {
+    let bytes = match (&method, path.as_ref(), accept.as_ref()) {
+        (&Method::GET, "/dns-query", JSON_MESSAGE_FORMAT) => {
             context
                 .json_parser
                 .parse(req)
@@ -79,7 +80,7 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
                 .and_then(|r| context.json_encoder.encode(r))
                 .await
         }
-        (Method::GET, "/dns-query", WIRE_MESSAGE_FORMAT) => {
+        (&Method::GET, "/dns-query", WIRE_MESSAGE_FORMAT) => {
             context
                 .get_parser
                 .parse(req)
@@ -87,7 +88,7 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
                 .and_then(|r| context.wire_encoder.encode(r))
                 .await
         }
-        (Method::POST, "/dns-query", WIRE_MESSAGE_FORMAT) => {
+        (&Method::POST, "/dns-query", WIRE_MESSAGE_FORMAT) => {
             context
                 .post_parser
                 .parse(req)
@@ -105,9 +106,19 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
 
     Ok(bytes
         .map(|b| {
+            event!(
+                target: "donut_request",
+                Level::INFO,
+                method = %method,
+                path = %path,
+                accept = %accept,
+                bytes = b.len(),
+                status = 200,
+            );
+
             Response::builder()
                 .status(StatusCode::OK)
-                .header(CONTENT_TYPE, accept)
+                .header(CONTENT_TYPE, &accept)
                 .body(Body::from(b))
                 .unwrap()
         })

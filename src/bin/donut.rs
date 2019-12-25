@@ -27,10 +27,13 @@ use std::env;
 use std::net::SocketAddr;
 use std::process;
 use std::sync::Arc;
+use tracing::{span, Level};
+use tracing_subscriber::EnvFilter;
 use trust_dns::client::SyncClient;
 use trust_dns::udp::UdpClientConnection;
 
 const MAX_TERM_WIDTH: usize = 72;
+const LOG_ENV_VAR: &str = "DONUT_LOG_LEVEL";
 
 // Set up the default upstream DNS server. We do this instead of using the
 // `.default_value(...)` methods of clap because we need to mark the various
@@ -93,16 +96,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args: Vec<String> = env::args().collect();
     let matches = parse_cli_opts(args);
 
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::FmtSubscriber::builder()
+            .with_env_filter(EnvFilter::from_env(LOG_ENV_VAR))
+            .finish(),
+    )
+    .expect("Failed to set tracing subscriber");
+
     let upstream = match get_upstream(&matches, "upstream-udp") {
         Some(Ok(v)) => v,
         Some(Err(e)) => e.exit(),
         None => SocketAddr::from(DEFAULT_UPSTREAM_UDP),
     };
     let context = Arc::new(new_handler_context(upstream));
-
     let service = make_service_fn(move |_| {
+        let service_span = span!(Level::TRACE, "donut_service");
+        let service_span_id = service_span.id();
+        let _service_span = service_span.enter();
         let context = context.clone();
-        async move { Ok::<_, hyper::Error>(service_fn(move |req| http_route(req, context.clone()))) }
+
+        async move {
+            Ok::<_, hyper::Error>(service_fn(move |req| {
+                let request_span = span!(Level::TRACE, "donut_request");
+                request_span.follows_from(service_span_id.clone());
+                let _request_span = request_span.enter();
+
+                http_route(req, context.clone())
+            }))
+        }
     });
 
     let bind_addr = value_t!(matches, "bind", SocketAddr).unwrap_or_else(|e| e.exit());

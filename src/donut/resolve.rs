@@ -22,6 +22,7 @@ use trust_dns::op::DnsResponse;
 use trust_dns::rr::DNSClass;
 use trust_dns::udp::UdpClientConnection;
 
+use tracing::{Level, event};
 ///
 ///
 ///
@@ -46,7 +47,19 @@ impl UdpResolver {
     ///
     ///
     pub async fn resolve(&self, req: DohRequest) -> DonutResult<DnsResponse> {
-        Ok(self.backend.query(&req.name, DNSClass::IN, req.kind)?)
+        let res = self.backend.query(&req.name, DNSClass::IN, req.kind)?;
+        let response = u16::from(res.response_code());
+
+        event!(
+            target: "donut_lookup",
+            Level::INFO,
+            name = %req.name,
+            kind = %req.kind,
+            results = res.len(),
+            response = response,
+        );
+
+        Ok(res)
     }
 }
 
