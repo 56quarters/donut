@@ -18,9 +18,9 @@
 
 use crate::types::DonutResult;
 use serde::Serialize;
-use trust_dns::op::DnsResponse;
-use trust_dns::proto::serialize::binary::BinEncodable;
-use trust_dns::rr::{RData, Record};
+use trust_dns_client::op::DnsResponse;
+use trust_dns_client::proto::serialize::binary::BinEncodable;
+use trust_dns_client::rr::{RData, Record};
 
 ///
 ///

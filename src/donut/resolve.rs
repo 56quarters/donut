@@ -17,29 +17,25 @@
 //
 
 use crate::types::{DohRequest, DonutResult};
-use trust_dns::client::{Client, SyncClient};
-use trust_dns::op::DnsResponse;
-use trust_dns::rr::DNSClass;
-use trust_dns::udp::UdpClientConnection;
+use tracing::{event, Level};
+use trust_dns_client::client::{AsyncClient, ClientHandle};
+use trust_dns_client::op::DnsResponse;
+use trust_dns_client::proto::udp::UdpResponse;
+use trust_dns_client::rr::DNSClass;
 
-use tracing::{Level, event};
 ///
 ///
 ///
-// Note that we're using the synchronous client instead of the ClientFuture. This is
-// because the version of trust_dns we're using is built on the futures crate while
-// Hyper (and the Tokio version it pulls in) is built on std::future. This means we
-// can't actually run the DNS client future (the "bg" future it returns) on the same
-// Tokio executor that everything else uses. So we just make this wrapper async instead.
 pub struct UdpResolver {
-    backend: SyncClient<UdpClientConnection>,
+    backend: AsyncClient<UdpResponse>,
 }
 
 impl UdpResolver {
+
     ///
     ///
     ///
-    pub fn new(backend: SyncClient<UdpClientConnection>) -> Self {
+    pub fn new(backend: AsyncClient<UdpResponse>) -> Self {
         UdpResolver { backend }
     }
 
@@ -47,7 +43,8 @@ impl UdpResolver {
     ///
     ///
     pub async fn resolve(&self, req: DohRequest) -> DonutResult<DnsResponse> {
-        let res = self.backend.query(&req.name, DNSClass::IN, req.kind)?;
+        let mut client = self.backend.clone();
+        let res = client.query(req.name.clone(), DNSClass::IN, req.kind).await?;
         let code = res.response_code();
 
         event!(

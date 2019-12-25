@@ -20,9 +20,9 @@ use crate::types::{DohRequest, DonutError, DonutResult, ErrorKind};
 use futures_util::{future, TryStreamExt};
 use hyper::{Body, Request};
 use std::collections::HashMap;
-use trust_dns::proto::op::Message;
-use trust_dns::proto::serialize::binary::BinDecodable;
-use trust_dns::rr::{Name, RecordType};
+use trust_dns_client::proto::op::Message;
+use trust_dns_client::proto::serialize::binary::BinDecodable;
+use trust_dns_client::rr::{Name, RecordType};
 
 const MAX_POST_SIZE: usize = 4096;
 
@@ -169,7 +169,7 @@ async fn read_from_body(body: Body, n: usize) -> DonutResult<Vec<u8>> {
                 return future::err(DonutError::from((ErrorKind::InputLength, "body too long")));
             }
 
-            acc.extend_from_slice(&*chunk.into_bytes());
+            acc.extend_from_slice(&*chunk);
             future::ok(acc)
         })
         .await

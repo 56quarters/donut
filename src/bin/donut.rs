@@ -21,16 +21,19 @@ use donut::http::{http_route, HandlerContext};
 use donut::request::{RequestParserJsonGet, RequestParserWireGet, RequestParserWirePost};
 use donut::resolve::UdpResolver;
 use donut::response::{ResponseEncoderJson, ResponseEncoderWire};
+use donut::types::DonutResult;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
 use std::env;
 use std::net::SocketAddr;
 use std::process;
 use std::sync::Arc;
-use tracing::{span, Level};
+use tokio::net::UdpSocket;
+use tracing::{event, span, Level};
 use tracing_subscriber::EnvFilter;
-use trust_dns::client::SyncClient;
-use trust_dns::udp::UdpClientConnection;
+use trust_dns_client::client::AsyncClient;
+use trust_dns_client::proto::udp::UdpResponse;
+use trust_dns_client::udp::UdpClientStream;
 
 const MAX_TERM_WIDTH: usize = 72;
 const LOG_ENV_VAR: &str = "DONUT_LOG_LEVEL";
@@ -62,10 +65,15 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
         .get_matches_from(args)
 }
 
-fn new_handler_context(addr: SocketAddr) -> HandlerContext {
-    let conn = UdpClientConnection::new(addr).unwrap();
-    let client = SyncClient::new(conn);
+async fn new_dns_client(addr: SocketAddr) -> DonutResult<AsyncClient<UdpResponse>> {
+    let conn = UdpClientStream::<UdpSocket>::new(addr);
+    let (client, bg) = AsyncClient::connect(conn).await?;
+    tokio::spawn(bg);
+    Ok(client)
+}
 
+async fn new_handler_context(addr: SocketAddr) -> DonutResult<HandlerContext> {
+    let client = new_dns_client(addr).await?;
     let resolver = UdpResolver::new(client);
     let json_parser = RequestParserJsonGet::default();
     let get_parser = RequestParserWireGet::default();
@@ -73,14 +81,14 @@ fn new_handler_context(addr: SocketAddr) -> HandlerContext {
     let json_encoder = ResponseEncoderJson::default();
     let wire_encoder = ResponseEncoderWire::default();
 
-    HandlerContext::new(
+    Ok(HandlerContext::new(
         json_parser,
         get_parser,
         post_parser,
         resolver,
         json_encoder,
         wire_encoder,
-    )
+    ))
 }
 
 fn get_upstream(matches: &ArgMatches, param: &str) -> Option<Result<SocketAddr, clap::Error>> {
@@ -92,7 +100,7 @@ fn get_upstream(matches: &ArgMatches, param: &str) -> Option<Result<SocketAddr, 
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     let matches = parse_cli_opts(args);
 
@@ -102,13 +110,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .finish(),
     )
     .expect("Failed to set tracing subscriber");
+    let server_span = span!(Level::TRACE, "donut_server");
+    let _server_span = server_span.enter();
 
     let upstream = match get_upstream(&matches, "upstream-udp") {
         Some(Ok(v)) => v,
         Some(Err(e)) => e.exit(),
         None => SocketAddr::from(DEFAULT_UPSTREAM_UDP),
     };
-    let context = Arc::new(new_handler_context(upstream));
+    let context = Arc::new(new_handler_context(upstream).await.unwrap());
     let service = make_service_fn(move |_| {
         let service_span = span!(Level::TRACE, "donut_service");
         let service_span_id = service_span.id();
@@ -128,12 +138,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let bind_addr = value_t!(matches, "bind", SocketAddr).unwrap_or_else(|e| e.exit());
     let server = Server::try_bind(&bind_addr).unwrap_or_else(|e| {
-        eprintln!("error: {}", e);
+        event!(
+            target: "donut_server",
+            Level::ERROR,
+            message = "server failed to start",
+            error = %e,
+        );
+
         process::exit(1);
     });
 
-    eprintln!("Using upstream DNS {}", upstream);
-    eprintln!("Listening on http://{}", bind_addr);
+    event!(
+        target: "donut_server",
+        Level::INFO,
+        message = "server started",
+        upstream = %upstream,
+        address = %bind_addr,
+    );
+
     server.serve(service).await?;
 
     Ok(())

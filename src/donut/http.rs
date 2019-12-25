@@ -58,6 +58,9 @@ impl HandlerContext {
     }
 }
 
+// TODO: Cache-control: max-age=$MIN_TTL
+//  Maybe use some result wrapper in the encoder
+
 pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Result<Response<Body>, hyper::Error> {
     // Copy all the request attributes we're matching on so that we can pass ownership
     // of the request into each parsing method (required for the POST parser since it
@@ -98,10 +101,10 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
         }
 
         // 400 for the correct path but an invalid Accept value
-        (_, "/dns-query", _) => return Ok(http_error_no_body(StatusCode::BAD_REQUEST)),
+        (_, "/dns-query", _) => return Ok(http_status_no_body(StatusCode::BAD_REQUEST)),
 
         // 404 for everything else
-        _ => return Ok(http_error_no_body(StatusCode::NOT_FOUND)),
+        _ => return Ok(http_status_no_body(StatusCode::NOT_FOUND)),
     };
 
     Ok(bytes
@@ -140,10 +143,10 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
                 error_msg = %e,
             );
 
-            http_error_no_body(status_code)
+            http_status_no_body(status_code)
         }))
 }
 
-fn http_error_no_body(code: StatusCode) -> Response<Body> {
+fn http_status_no_body(code: StatusCode) -> Response<Body> {
     Response::builder().status(code).body(Body::empty()).unwrap()
 }

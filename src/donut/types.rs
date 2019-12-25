@@ -21,12 +21,12 @@ use failure::{Backtrace, Fail};
 use hyper::Error as HyperError;
 use serde_json::Error as SerdeError;
 use std::fmt;
-use trust_dns::error::{
+use trust_dns_client::error::{
     ClientError as DnsClientError, ClientErrorKind as DnsClientErrorKind, ParseError as DnsParseError,
     ParseErrorKind as DnsParseErrorKind,
 };
-use trust_dns::proto::error::{ProtoError as DnsProtoError, ProtoErrorKind as DnsProtoErrorKind};
-use trust_dns::rr::{Name, RecordType};
+use trust_dns_client::proto::error::{ProtoError as DnsProtoError, ProtoErrorKind as DnsProtoErrorKind};
+use trust_dns_client::rr::{Name, RecordType};
 
 pub type DonutResult<T> = Result<T, DonutError>;
 
@@ -187,14 +187,12 @@ impl From<(ErrorKind, String)> for DonutError {
     }
 }
 
-// TODO: Support multiple name + type pairs?
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DohRequest {
     pub name: Name,
     pub kind: RecordType,
     pub checking_disabled: bool,
     pub dnssec_data: bool,
-    pub queries: Vec<(Name, RecordType)>,
 }
 
 impl DohRequest {
@@ -204,7 +202,6 @@ impl DohRequest {
             kind,
             checking_disabled,
             dnssec_data,
-            queries: Vec::new(),
         }
     }
 }

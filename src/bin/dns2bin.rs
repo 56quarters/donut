@@ -19,9 +19,9 @@
 use clap::{crate_version, value_t_or_exit, App, Arg, ArgMatches};
 use std::env;
 use std::io::{self, Write};
-use trust_dns::op::{Message, Query};
-use trust_dns::rr::{Name, RecordType};
-use trust_dns::serialize::binary::BinEncodable;
+use trust_dns_client::op::{Message, Query};
+use trust_dns_client::rr::{Name, RecordType};
+use trust_dns_client::serialize::binary::BinEncodable;
 
 const MAX_TERM_WIDTH: usize = 72;
 

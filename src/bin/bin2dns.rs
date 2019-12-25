@@ -20,8 +20,8 @@ use clap::{crate_version, App, ArgMatches};
 use std::env;
 use std::fmt::Write;
 use std::io::{self, Read};
-use trust_dns::op::Message;
-use trust_dns::rr::Record;
+use trust_dns_client::op::Message;
+use trust_dns_client::rr::Record;
 
 const MAX_TERM_WIDTH: usize = 72;
 
