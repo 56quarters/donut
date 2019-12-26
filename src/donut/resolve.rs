@@ -31,7 +31,6 @@ pub struct UdpResolver {
 }
 
 impl UdpResolver {
-
     ///
     ///
     ///
@@ -43,6 +42,10 @@ impl UdpResolver {
     ///
     ///
     pub async fn resolve(&self, req: DohRequest) -> DonutResult<DnsResponse> {
+        // Note that we're cloning the client here because the query method takes a mutable
+        // reference to self. Our options are to either guard the client with a mutex or to
+        // use a new instance for each request. Turns out that cloning the instance is actually
+        // faster than using a mutex and scales better if requests starting timing out.
         let mut client = self.backend.clone();
         let res = client.query(req.name.clone(), DNSClass::IN, req.kind).await?;
         let code = res.response_code();
