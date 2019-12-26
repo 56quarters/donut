@@ -130,7 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let timeout = value_t!(matches, "upstream-timeout", u64)
-        .map(|t| Duration::from_millis(t))
+        .map(Duration::from_millis)
         .unwrap_or_else(|e| e.exit());
 
     let context = Arc::new(new_handler_context(upstream, timeout).await.unwrap());

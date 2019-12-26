@@ -24,6 +24,26 @@ use trust_dns_client::rr::{RData, Record};
 
 ///
 ///
+#[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
+pub struct ResponseMetadata {
+    min_ttl: Option<u32>,
+}
+
+impl ResponseMetadata {
+    pub fn min_ttl(&self) -> Option<u32> {
+        self.min_ttl
+    }
+}
+
+impl From<&DnsResponse> for ResponseMetadata {
+    fn from(r: &DnsResponse) -> Self {
+        let min_ttl = r.answers().iter().map(|a| a.ttl()).min();
+        ResponseMetadata { min_ttl }
+    }
+}
+
+///
+///
 ///
 #[derive(Debug, Default, Clone)]
 pub struct ResponseEncoderJson;
@@ -39,7 +59,7 @@ impl ResponseEncoderJson {
     ///
     ///
     ///
-    pub async fn encode(&self, res: DnsResponse) -> DonutResult<Vec<u8>> {
+    pub async fn encode(&self, res: DnsResponse) -> DonutResult<(ResponseMetadata, Vec<u8>)> {
         let questions: Vec<JsonQuestion> = res
             .queries()
             .iter()
@@ -60,16 +80,19 @@ impl ResponseEncoderJson {
             })
             .collect();
 
-        Ok(serde_json::to_vec(&JsonResponse::new(
-            u16::from(res.response_code()),
-            res.truncated(),
-            res.recursion_desired(),
-            res.recursion_available(),
-            false,
-            true,
-            questions,
-            answers,
-        ))?)
+        Ok((
+            ResponseMetadata::from(&res),
+            serde_json::to_vec(&JsonResponse::new(
+                u16::from(res.response_code()),
+                res.truncated(),
+                res.recursion_desired(),
+                res.recursion_available(),
+                false,
+                true,
+                questions,
+                answers,
+            ))?,
+        ))
     }
 }
 
@@ -232,7 +255,7 @@ impl ResponseEncoderWire {
     ///
     ///
     ///
-    pub async fn encode(&self, res: DnsResponse) -> DonutResult<Vec<u8>> {
-        Ok(res.to_bytes()?)
+    pub async fn encode(&self, res: DnsResponse) -> DonutResult<(ResponseMetadata, Vec<u8>)> {
+        Ok((ResponseMetadata::from(&res), res.to_bytes()?))
     }
 }

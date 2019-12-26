@@ -55,7 +55,7 @@ impl UdpResolver {
             Level::INFO,
             name = %req.name,
             kind = %req.kind,
-            results = res.len(),
+            results = res.answers().len(),
             response = u16::from(code),
             response_msg = %code,
         );

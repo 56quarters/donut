@@ -18,10 +18,10 @@
 
 use crate::request::{RequestParserJsonGet, RequestParserWireGet, RequestParserWirePost};
 use crate::resolve::UdpResolver;
-use crate::response::{ResponseEncoderJson, ResponseEncoderWire};
-use crate::types::ErrorKind;
+use crate::response::{ResponseEncoderJson, ResponseEncoderWire, ResponseMetadata};
+use crate::types::{DonutError, ErrorKind};
 use futures_util::TryFutureExt;
-use hyper::header::{ACCEPT, CONTENT_TYPE};
+use hyper::header::{ACCEPT, CACHE_CONTROL, CONTENT_TYPE};
 use hyper::{Body, Method, Request, Response, StatusCode};
 use std::sync::Arc;
 use tracing::{event, Level};
@@ -58,9 +58,6 @@ impl HandlerContext {
     }
 }
 
-// TODO: Cache-control: max-age=$MIN_TTL
-//  Maybe use some result wrapper in the encoder
-
 pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Result<Response<Body>, hyper::Error> {
     // Copy all the request attributes we're matching on so that we can pass ownership
     // of the request into each parsing method (required for the POST parser since it
@@ -74,7 +71,7 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
         .unwrap_or("")
         .to_owned();
 
-    let bytes = match (&method, path.as_ref(), accept.as_ref()) {
+    let encoded = match (&method, path.as_ref(), accept.as_ref()) {
         (&Method::GET, "/dns-query", JSON_MESSAGE_FORMAT) => {
             context
                 .json_parser
@@ -107,46 +104,63 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
         _ => return Ok(http_status_no_body(StatusCode::NOT_FOUND)),
     };
 
-    Ok(bytes
-        .map(|b| {
-            event!(
-                target: "donut_request",
-                Level::INFO,
-                method = %method,
-                path = %path,
-                accept = %accept,
-                status = 200,
-                bytes = b.len(),
-            );
-
-            Response::builder()
-                .status(StatusCode::OK)
-                .header(CONTENT_TYPE, &accept)
-                .body(Body::from(b))
-                .unwrap()
-        })
-        .unwrap_or_else(|e| {
-            let status_code = match e.kind() {
-                ErrorKind::InputParsing | ErrorKind::InputSerialization => StatusCode::BAD_REQUEST,
-                ErrorKind::InputLength => StatusCode::PAYLOAD_TOO_LARGE,
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
-            };
-
-            event!(
-                target: "donut_request",
-                Level::INFO,
-                method = %method,
-                path = %path,
-                accept = %accept,
-                status = status_code.as_u16(),
-                error_kind = ?e.kind(),
-                error_msg = %e,
-            );
-
-            http_status_no_body(status_code)
-        }))
+    Ok(encoded
+        .map(|(meta, bytes)| render_ok(&method, &path, &accept, meta, bytes))
+        .unwrap_or_else(|e| render_err(&method, &path, &accept, e)))
 }
 
+///
+///
+///
+fn render_ok(method: &Method, path: &str, accept: &str, meta: ResponseMetadata, bytes: Vec<u8>) -> Response<Body> {
+    event!(
+        target: "donut_request",
+        Level::INFO,
+        method = %method,
+        path = %path,
+        accept = %accept,
+        status = 200,
+        bytes = bytes.len(),
+    );
+
+    let mut builder = Response::builder().status(StatusCode::OK).header(CONTENT_TYPE, accept);
+    if method == Method::GET {
+        if let Some(ttl) = meta.min_ttl() {
+            builder = builder.header(CACHE_CONTROL, format!("max-age={}", ttl));
+        }
+    }
+
+    builder.body(Body::from(bytes)).unwrap()
+}
+
+///
+///
+///
+fn render_err(method: &Method, path: &str, accept: &str, err: DonutError) -> Response<Body> {
+    let status_code = match err.kind() {
+        ErrorKind::InputParsing | ErrorKind::InputSerialization => StatusCode::BAD_REQUEST,
+        ErrorKind::InputLength => StatusCode::PAYLOAD_TOO_LARGE,
+        ErrorKind::DnsTimeout => StatusCode::SERVICE_UNAVAILABLE,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+
+    event!(
+        target: "donut_request",
+        Level::INFO,
+        method = %method,
+        path = %path,
+        accept = %accept,
+        status = status_code.as_u16(),
+        error_kind = ?err.kind(),
+        error_msg = %err,
+    );
+
+    http_status_no_body(status_code)
+}
+
+///
+///
+///
 fn http_status_no_body(code: StatusCode) -> Response<Body> {
     Response::builder().status(code).body(Body::empty()).unwrap()
 }
