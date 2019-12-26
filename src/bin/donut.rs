@@ -28,6 +28,7 @@ use std::env;
 use std::net::SocketAddr;
 use std::process;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::UdpSocket;
 use tracing::{event, span, Level};
 use tracing_subscriber::EnvFilter;
@@ -57,6 +58,12 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
                 .help("Send DNS queries to this upstream DNS server (via DNS over UDP)."),
         )
         .arg(
+            Arg::with_name("upstream-timeout")
+                .long("upstream-timeout")
+                .default_value("1000")
+                .help("Timeout for upstream DNS server in milliseconds."),
+        )
+        .arg(
             Arg::with_name("bind")
                 .long("bind")
                 .default_value("127.0.0.1:3000")
@@ -65,15 +72,18 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
         .get_matches_from(args)
 }
 
-async fn new_dns_client(addr: SocketAddr) -> DonutResult<AsyncClient<UdpResponse>> {
-    let conn = UdpClientStream::<UdpSocket>::new(addr);
+async fn new_dns_client(addr: SocketAddr, timeout: Duration) -> DonutResult<AsyncClient<UdpResponse>> {
+    let conn = UdpClientStream::<UdpSocket>::with_timeout(addr, timeout);
     let (client, bg) = AsyncClient::connect(conn).await?;
+    // Trust DNS clients are really just handles for talking to a future running in the background
+    // that actually does all the network activity and DNS lookups. Start the background future here
+    // on whatever Tokio executor has been set up when `main()` was run.
     tokio::spawn(bg);
     Ok(client)
 }
 
-async fn new_handler_context(addr: SocketAddr) -> DonutResult<HandlerContext> {
-    let client = new_dns_client(addr).await?;
+async fn new_handler_context(addr: SocketAddr, timeout: Duration) -> DonutResult<HandlerContext> {
+    let client = new_dns_client(addr, timeout).await?;
     let resolver = UdpResolver::new(client);
     let json_parser = RequestParserJsonGet::default();
     let get_parser = RequestParserWireGet::default();
@@ -118,7 +128,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Err(e)) => e.exit(),
         None => SocketAddr::from(DEFAULT_UPSTREAM_UDP),
     };
-    let context = Arc::new(new_handler_context(upstream).await.unwrap());
+
+    let timeout = value_t!(matches, "upstream-timeout", u64)
+        .map(|t| Duration::from_millis(t))
+        .unwrap_or_else(|e| e.exit());
+
+    let context = Arc::new(new_handler_context(upstream, timeout).await.unwrap());
     let service = make_service_fn(move |_| {
         let service_span = span!(Level::TRACE, "donut_service");
         let service_span_id = service_span.id();
@@ -154,6 +169,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         message = "server started",
         upstream = %upstream,
         address = %bind_addr,
+        timeout_ms = %timeout.as_millis(),
     );
 
     server.serve(service).await?;
