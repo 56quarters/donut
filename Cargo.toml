@@ -1,7 +1,12 @@
 [package]
 name = "donut"
 version = "0.1.0"
-authors = ["Nick Pillitteri <nick@tshlabs.org>"]
+authors = ["TSH Labs"]
+description = "DNS over HTTPS server"
+homepage = "https://github.com/tshlabs/donut"
+repository = "https://github.com/tshlabs/donut"
+readme = "README.md"
+license = "GPL-3.0+"
 edition = "2018"
 
 [dependencies]
@@ -15,7 +20,7 @@ serde_json = "1.0.41"
 tokio = { version = "0.2.6", features = ["full"] }
 tracing = "0.1.11"
 tracing-subscriber = "0.1.6"
-trust-dns-client = "0.18.0"
+trust-dns-client = { version = "0.18.0" }
 url = "2.1.0"
 
 [lib]

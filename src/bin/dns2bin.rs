@@ -1,6 +1,6 @@
 // Donut - DNS over HTTPS server
 //
-// Copyright 2019 Nick Pillitteri
+// Copyright 2019 TSH Labs
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -70,8 +70,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         })
         // TODO: Our error type doesn't implement Error (only Fail) and
-        // there are conflicting traits when we try (failure seems to have
-        // a default impl... but we still get type errors here with `?`).
+        //  there are conflicting traits when we try (failure seems to have
+        //  a default impl... but we still get type errors here with `?`).
         .unwrap();
 
     let mut stdout = io::stdout();

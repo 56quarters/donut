@@ -1,6 +1,6 @@
 // Donut - DNS over HTTPS server
 //
-// Copyright 2019 Nick Pillitteri
+// Copyright 2019 TSH Labs
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
