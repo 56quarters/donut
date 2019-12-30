@@ -1,10 +1,8 @@
-time curl -v -H 'Accept: application/dns-message' "http://localhost:3000/dns-query?dns=$(./util/dns2doh --onlyq --AAAA 56quarters.xyz)" | hexdump
+time curl -v -H 'Accept: application/dns-message' "http://localhost:3000/dns-query?dns=$(./target/debug/dns2bin -t AAAA 56quarters.xyz)" | hexdump
 
-time curl -v -H 'Accept: application/dns-message'"http://localhost:3000/dns-query?dns=$(./util/dns2doh --onlyq --A 56quarters.xyz)" | ./target/debug/bin2dns
+time curl -v -H 'Accept: application/dns-message' "http://localhost:3000/dns-query?dns=$(./target/debug/dns2bin -t AAAA 56quarters.xyz)" | ./target/debug/bin2dns
 
 time curl -v -H 'Accept: application/dns-json' "http://localhost:3000/dns-query?name=56quarters.xyz&type=AAAA" | jq .
 
 ./target/debug/dns2bin -r -t AAAA 56quarters.xyz > q.bin
 time curl -v --data-binary @q.bin -H 'Accept: application/dns-message' 'http://localhost:3000/dns-query' | ./target/debug/bin2dns
-
-time curl -v -H 'Accept: application/dns-message' "http://localhost:3000/dns-query?dns=$(./target/debug/dns2bin -t A 56quarters.xyz)" | ./target/debug/bin2dns
