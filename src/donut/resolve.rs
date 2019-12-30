@@ -21,23 +21,18 @@ use tracing::{event, Level};
 use trust_dns_client::client::{AsyncClient, ClientHandle};
 use trust_dns_client::op::DnsResponse;
 use trust_dns_client::proto::udp::UdpResponse;
+use trust_dns_client::proto::xfer::DnsMultiplexerSerialResponse;
 use trust_dns_client::rr::DNSClass;
 
 ///
 ///
 ///
-pub struct UdpResolver {
-    backend: AsyncClient<UdpResponse>,
+#[derive(Debug, Clone)]
+pub struct MultiTransportResolver {
+    repr: ResolverRepr,
 }
 
-impl UdpResolver {
-    ///
-    ///
-    ///
-    pub fn new(backend: AsyncClient<UdpResponse>) -> Self {
-        UdpResolver { backend }
-    }
-
+impl MultiTransportResolver {
     ///
     ///
     ///
@@ -46,8 +41,17 @@ impl UdpResolver {
         // reference to self. Our options are to either guard the client with a mutex or to
         // use a new instance for each request. Turns out that cloning the instance is actually
         // faster than using a mutex and scales better if requests starting timing out.
-        let mut client = self.backend.clone();
-        let res = client.query(req.name.clone(), DNSClass::IN, req.kind).await?;
+        let res = match self.repr {
+            ResolverRepr::UdpBackend(ref client) => {
+                let mut copy = client.clone();
+                copy.query(req.name.clone(), DNSClass::IN, req.kind).await?
+            }
+            ResolverRepr::TcpBackend(ref client) => {
+                let mut copy = client.clone();
+                copy.query(req.name.clone(), DNSClass::IN, req.kind).await?
+            }
+        };
+
         let code = res.response_code();
 
         event!(
@@ -64,10 +68,40 @@ impl UdpResolver {
     }
 }
 
-impl std::fmt::Debug for UdpResolver {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "UdpResolver {{ ... }}")
+impl From<AsyncClient<UdpResponse>> for MultiTransportResolver {
+    fn from(client: AsyncClient<UdpResponse>) -> Self {
+        MultiTransportResolver {
+            repr: ResolverRepr::UdpBackend(client),
+        }
     }
 }
 
-pub struct TlsResolver;
+impl From<AsyncClient<DnsMultiplexerSerialResponse>> for MultiTransportResolver {
+    fn from(client: AsyncClient<DnsMultiplexerSerialResponse>) -> Self {
+        MultiTransportResolver {
+            repr: ResolverRepr::TcpBackend(client),
+        }
+    }
+}
+
+///
+///
+///
+// Manually implementing dynamic dispatch like a chump because we can't use `async`
+// in a trait without a crate that makes the type signatures really complicated and I
+// still don't understand what Pin<T> means.
+#[derive(Clone)]
+enum ResolverRepr {
+    UdpBackend(AsyncClient<UdpResponse>),
+    TcpBackend(AsyncClient<DnsMultiplexerSerialResponse>),
+}
+
+impl std::fmt::Debug for ResolverRepr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            ResolverRepr::UdpBackend(_) => write!(f, "ResolverRepr::UdpBackend {{ ... }}"),
+            ResolverRepr::TcpBackend(_) => write!(f, "ResolverRepr::TcpBackend {{ ... }}"),
+        }
+    }
+}
+

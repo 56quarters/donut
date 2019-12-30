@@ -19,11 +19,12 @@
 use clap::{crate_version, value_t, App, Arg, ArgMatches};
 use donut::http::{http_route, HandlerContext};
 use donut::request::{RequestParserJsonGet, RequestParserWireGet, RequestParserWirePost};
-use donut::resolve::UdpResolver;
+use donut::resolve::MultiTransportResolver;
 use donut::response::{ResponseEncoderJson, ResponseEncoderWire};
 use donut::types::DonutResult;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
+use rustls::ClientConfig as TlsClientConfig;
 use std::env;
 use std::net::SocketAddr;
 use std::process;
@@ -34,7 +35,9 @@ use tracing::{event, span, Level};
 use tracing_subscriber::EnvFilter;
 use trust_dns_client::client::AsyncClient;
 use trust_dns_client::proto::udp::UdpResponse;
+use trust_dns_client::proto::xfer::DnsMultiplexerSerialResponse;
 use trust_dns_client::udp::UdpClientStream;
+use trust_dns_rustls::tls_client_connect;
 
 const MAX_TERM_WIDTH: usize = 72;
 const LOG_ENV_VAR: &str = "DONUT_LOG_LEVEL";
@@ -72,7 +75,25 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
         .get_matches_from(args)
 }
 
-async fn new_dns_client(addr: SocketAddr, timeout: Duration) -> DonutResult<AsyncClient<UdpResponse>> {
+#[allow(unused)]
+async fn new_tls_dns_client(
+    addr: SocketAddr,
+    timeout: Duration,
+    domain: String,
+) -> DonutResult<AsyncClient<DnsMultiplexerSerialResponse>> {
+    unimplemented!();
+
+    let config = Arc::new(TlsClientConfig::default());
+    let (stream, handle) = tls_client_connect(addr, domain, config);
+    let (client, bg) = AsyncClient::with_timeout(stream, Box::new(handle), timeout, None).await?;
+    // Trust DNS clients are really just handles for talking to a future running in the background
+    // that actually does all the network activity and DNS lookups. Start the background future here
+    // on whatever Tokio executor has been set up when `main()` was run.
+    tokio::spawn(bg);
+    Ok(client)
+}
+
+async fn new_udp_dns_client(addr: SocketAddr, timeout: Duration) -> DonutResult<AsyncClient<UdpResponse>> {
     let conn = UdpClientStream::<UdpSocket>::with_timeout(addr, timeout);
     let (client, bg) = AsyncClient::connect(conn).await?;
     // Trust DNS clients are really just handles for talking to a future running in the background
@@ -83,8 +104,8 @@ async fn new_dns_client(addr: SocketAddr, timeout: Duration) -> DonutResult<Asyn
 }
 
 async fn new_handler_context(addr: SocketAddr, timeout: Duration) -> DonutResult<HandlerContext> {
-    let client = new_dns_client(addr, timeout).await?;
-    let resolver = UdpResolver::new(client);
+    let client = new_udp_dns_client(addr, timeout).await?;
+    let resolver = MultiTransportResolver::from(client);
     let json_parser = RequestParserJsonGet::default();
     let get_parser = RequestParserWireGet::default();
     let post_parser = RequestParserWirePost::default();
