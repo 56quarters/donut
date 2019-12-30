@@ -17,6 +17,8 @@
 //
 
 use crate::types::{DohRequest, DonutResult};
+use async_trait::async_trait;
+use std::fmt;
 use tracing::{event, Level};
 use trust_dns_client::client::{AsyncClient, ClientHandle};
 use trust_dns_client::op::DnsResponse;
@@ -27,9 +29,57 @@ use trust_dns_client::rr::DNSClass;
 ///
 ///
 ///
-#[derive(Debug, Clone)]
+#[async_trait]
+trait AsyncClientAdapter: Send + Sync {
+    async fn resolve(&self, req: DohRequest) -> DonutResult<DnsResponse>;
+}
+
+///
+///
+///
+#[derive(Clone)]
+struct UdpAsyncClientAdapter(AsyncClient<UdpResponse>);
+
+#[async_trait]
+impl AsyncClientAdapter for UdpAsyncClientAdapter {
+    async fn resolve(&self, req: DohRequest) -> DonutResult<DnsResponse> {
+        let mut client = self.0.clone();
+        Ok(client.query(req.name, DNSClass::IN, req.kind).await?)
+    }
+}
+
+impl fmt::Debug for UdpAsyncClientAdapter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "UdpAsyncClientAdapter(AsyncClient<...>)")
+    }
+}
+
+///
+///
+///
+#[derive(Clone)]
+struct TcpAsyncClientAdapter(AsyncClient<DnsMultiplexerSerialResponse>);
+
+#[async_trait]
+impl AsyncClientAdapter for TcpAsyncClientAdapter {
+    async fn resolve(&self, req: DohRequest) -> DonutResult<DnsResponse> {
+        let mut client = self.0.clone();
+        Ok(client.query(req.name, DNSClass::IN, req.kind).await?)
+    }
+}
+
+impl fmt::Debug for TcpAsyncClientAdapter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "TcpAsyncClientAdapter(AsyncClient<...>)")
+    }
+}
+
+
+///
+///
+///
 pub struct MultiTransportResolver {
-    repr: ResolverRepr,
+    delegate: Box<dyn AsyncClientAdapter>,
 }
 
 impl MultiTransportResolver {
@@ -37,21 +87,7 @@ impl MultiTransportResolver {
     ///
     ///
     pub async fn resolve(&self, req: DohRequest) -> DonutResult<DnsResponse> {
-        // Note that we're cloning the client here because the query method takes a mutable
-        // reference to self. Our options are to either guard the client with a mutex or to
-        // use a new instance for each request. Turns out that cloning the instance is actually
-        // faster than using a mutex and scales better if requests starting timing out.
-        let res = match self.repr {
-            ResolverRepr::UdpBackend(ref client) => {
-                let mut copy = client.clone();
-                copy.query(req.name.clone(), DNSClass::IN, req.kind).await?
-            }
-            ResolverRepr::TcpBackend(ref client) => {
-                let mut copy = client.clone();
-                copy.query(req.name.clone(), DNSClass::IN, req.kind).await?
-            }
-        };
-
+        let res = self.delegate.resolve(req.clone()).await?;
         let code = res.response_code();
 
         event!(
@@ -71,7 +107,7 @@ impl MultiTransportResolver {
 impl From<AsyncClient<UdpResponse>> for MultiTransportResolver {
     fn from(client: AsyncClient<UdpResponse>) -> Self {
         MultiTransportResolver {
-            repr: ResolverRepr::UdpBackend(client),
+            delegate: Box::new(UdpAsyncClientAdapter(client)),
         }
     }
 }
@@ -79,29 +115,13 @@ impl From<AsyncClient<UdpResponse>> for MultiTransportResolver {
 impl From<AsyncClient<DnsMultiplexerSerialResponse>> for MultiTransportResolver {
     fn from(client: AsyncClient<DnsMultiplexerSerialResponse>) -> Self {
         MultiTransportResolver {
-            repr: ResolverRepr::TcpBackend(client),
+            delegate: Box::new(TcpAsyncClientAdapter(client)),
         }
     }
 }
 
-///
-///
-///
-// Manually implementing dynamic dispatch like a chump because we can't use `async`
-// in a trait without a crate that makes the type signatures really complicated and I
-// still don't understand what Pin<T> means.
-#[derive(Clone)]
-enum ResolverRepr {
-    UdpBackend(AsyncClient<UdpResponse>),
-    TcpBackend(AsyncClient<DnsMultiplexerSerialResponse>),
-}
-
-impl std::fmt::Debug for ResolverRepr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        match self {
-            ResolverRepr::UdpBackend(_) => write!(f, "ResolverRepr::UdpBackend {{ ... }}"),
-            ResolverRepr::TcpBackend(_) => write!(f, "ResolverRepr::TcpBackend {{ ... }}"),
-        }
+impl fmt::Debug for MultiTransportResolver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "MultiTransportResolver {{ delegate: dyn AsyncClientAdapter(...) }}")
     }
 }
-
