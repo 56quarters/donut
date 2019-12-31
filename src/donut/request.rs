@@ -24,8 +24,6 @@ use trust_dns_client::proto::op::Message;
 use trust_dns_client::proto::serialize::binary::BinDecodable;
 use trust_dns_client::rr::{Name, RecordType};
 
-const MAX_POST_SIZE: usize = 4096;
-
 #[derive(Debug, Default, Clone)]
 pub struct RequestParserJsonGet;
 
@@ -131,16 +129,22 @@ pub struct RequestParserWirePost {
 
 impl Default for RequestParserWirePost {
     fn default() -> Self {
-        Self::new(MAX_POST_SIZE)
+        Self::new(Self::MAX_POST_SIZE)
     }
 }
 
 impl RequestParserWirePost {
     ///
     ///
+    const MAX_POST_SIZE: usize = 4096;
+
+    ///
+    ///
     ///
     pub fn new(max_size: usize) -> Self {
-        RequestParserWirePost { max_size }
+        RequestParserWirePost {
+            max_size: Self::MAX_POST_SIZE.min(max_size),
+        }
     }
 
     ///
