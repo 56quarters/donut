@@ -18,10 +18,12 @@
 
 use crate::types::DonutResult;
 use serde::Serialize;
+use std::str;
 use trust_dns_client::op::DnsResponse;
 use trust_dns_client::proto::serialize::binary::BinEncodable;
 use trust_dns_client::rr::{RData, Record};
 
+///
 ///
 ///
 #[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
@@ -96,24 +98,39 @@ impl ResponseEncoderJson {
     }
 }
 
+///
+///
+///
 pub fn record_to_data(record: &Record) -> String {
     match record.rdata() {
         RData::A(v) => v.to_string(),
         RData::AAAA(v) => v.to_string(),
         RData::ANAME(v) => v.to_string(),
         //RData::CAA(v) => ,
-        RData::CNAME(v) => v.to_string(),
+        RData::CNAME(v) => v.to_utf8(),
         RData::MX(v) => format!("{} {}", v.preference(), v.exchange()),
-        //RData::NAPTR(v) => ,
-        RData::NS(v) => v.to_string(),
+        RData::NAPTR(v) => {
+            let order = v.order();
+            let pref = v.preference();
+            let flags = str::from_utf8(v.flags()).unwrap_or("");
+            let services = str::from_utf8(v.services()).unwrap_or("");
+            let regex = str::from_utf8(v.regexp()).unwrap_or("");
+            let replacement = v.replacement();
+
+            format!(
+                "{} {} \"{}\" \"{}\" \"{}\" {}",
+                order, pref, flags, services, regex, replacement
+            )
+        }
+        RData::NS(v) => v.to_utf8(),
         //RData::NULL(v) =>  ,
         //RData::OPENPGPKEY(v) => ,
         //RData::OPT(v) => ,
-        RData::PTR(v) => v.to_string(),
+        RData::PTR(v) => v.to_utf8(),
         RData::SOA(v) => format!(
             "{} {} {} {} {} {} {}",
-            v.mname().to_string(),
-            v.rname().to_string(),
+            v.mname(),
+            v.rname(),
             v.serial(),
             v.refresh(),
             v.retry(),
@@ -127,8 +144,8 @@ pub fn record_to_data(record: &Record) -> String {
             "\"{}\"",
             v.txt_data()
                 .iter()
-                .flat_map(|t| String::from_utf8(t.to_vec()))
-                .collect::<Vec<String>>()
+                .flat_map(|t| str::from_utf8(t))
+                .collect::<Vec<&str>>()
                 .concat()
         ),
         _ => panic!("Unexpected result: {:?}", record),
