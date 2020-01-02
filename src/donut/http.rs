@@ -29,6 +29,7 @@ use tracing::{event, Level};
 const WIRE_MESSAGE_FORMAT: &str = "application/dns-message";
 const JSON_MESSAGE_FORMAT: &str = "application/dns-json";
 
+#[derive(Debug)]
 pub struct HandlerContext {
     json_parser: RequestParserJsonGet,
     get_parser: RequestParserWireGet,
@@ -146,7 +147,7 @@ fn render_err(method: &Method, path: &str, accept: &str, err: DonutError) -> Res
 
     event!(
         target: "donut_request",
-        Level::INFO,
+        Level::WARN,
         method = %method,
         path = %path,
         accept = %accept,
