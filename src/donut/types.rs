@@ -99,19 +99,19 @@ impl fmt::Display for DonutError {
 
 impl Fail for DonutError {
     fn cause(&self) -> Option<&dyn Fail> {
-        match &self.repr {
-            ErrorRepr::Base64Error(ref e) => e.cause(),
-            ErrorRepr::DnsClientError(ref e) => e.cause(),
-            ErrorRepr::DnsParseError(ref e) => e.cause(),
-            ErrorRepr::DnsProtoError(ref e) => e.cause(),
-            ErrorRepr::HttpError(ref e) => e.cause(),
-            ErrorRepr::SerializationError(ref e) => e.cause(),
+        match self.repr {
+            ErrorRepr::Base64Error(ref e) => Some(e),
+            ErrorRepr::DnsClientError(ref e) => Some(e),
+            ErrorRepr::DnsParseError(ref e) => Some(e),
+            ErrorRepr::DnsProtoError(ref e) => Some(e),
+            ErrorRepr::HttpError(ref e) => Some(e),
+            ErrorRepr::SerializationError(ref e) => Some(e),
             _ => None,
         }
     }
 
     fn backtrace(&self) -> Option<&Backtrace> {
-        match &self.repr {
+        match self.repr {
             ErrorRepr::Base64Error(ref e) => e.backtrace(),
             ErrorRepr::DnsClientError(ref e) => e.backtrace(),
             ErrorRepr::DnsParseError(ref e) => e.backtrace(),
