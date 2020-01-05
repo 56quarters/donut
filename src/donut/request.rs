@@ -24,6 +24,9 @@ use trust_dns_client::proto::op::Message;
 use trust_dns_client::proto::serialize::binary::BinDecodable;
 use trust_dns_client::rr::{Name, RecordType};
 
+///
+///
+///
 #[derive(Debug, Default, Clone)]
 pub struct RequestParserJsonGet;
 
@@ -32,6 +35,9 @@ impl RequestParserJsonGet {
         RequestParserJsonGet
     }
 
+    ///
+    ///
+    ///
     pub async fn parse(&self, req: Request<Body>) -> DonutResult<DohRequest> {
         let qs = req.uri().query().unwrap_or("").to_string();
         let query = url::form_urlencoded::parse(qs.as_bytes());
@@ -127,20 +133,13 @@ pub struct RequestParserWirePost {
     max_size: usize,
 }
 
-impl Default for RequestParserWirePost {
-    fn default() -> Self {
-        Self::new(Self::MAX_POST_SIZE)
-    }
-}
-
 impl RequestParserWirePost {
-    ///
-    ///
+    /// Max size for a POST request body, in bytes.
     const MAX_POST_SIZE: usize = 4096;
 
+    /// Create a new POST request parers with the provided max body size limit.
     ///
-    ///
-    ///
+    /// If the limit is larger than 4k bytes, 4k bytes will be used as the max.
     pub fn new(max_size: usize) -> Self {
         RequestParserWirePost {
             max_size: Self::MAX_POST_SIZE.min(max_size),
@@ -151,30 +150,46 @@ impl RequestParserWirePost {
     ///
     ///
     pub async fn parse(&self, req: Request<Body>) -> DonutResult<DohRequest> {
-        let bytes = read_from_body(req.into_body(), self.max_size).await?;
+        let bytes = Self::read_from_body(req.into_body(), self.max_size).await?;
         let message = Message::from_bytes(&bytes).map_err(DonutError::from)?;
         let (name, kind) = question_from_message(&message)?;
         Ok(DohRequest::new(name, kind, message.checking_disabled(), false))
     }
+
+    /// Asynchronously read `n` bytes from the given body, consuming it.
+    ///
+    /// # Errors
+    ///
+    /// Return an error if the body is longer than `n` bytes.
+    async fn read_from_body(body: Body, n: usize) -> DonutResult<Vec<u8>> {
+        body.map_err(DonutError::from)
+            .try_fold(Vec::new(), |mut acc, chunk| {
+                if chunk.len() + acc.len() > n {
+                    return future::err(DonutError::from((ErrorKind::InputLength, "body too long")));
+                }
+
+                acc.extend_from_slice(&*chunk);
+                future::ok(acc)
+            })
+            .await
+    }
 }
 
+impl Default for RequestParserWirePost {
+    fn default() -> Self {
+        Self::new(Self::MAX_POST_SIZE)
+    }
+}
+
+/// Get the first `Name` and `RecordType` from a given message question without consuming it
+///
+/// # Errors
+///
+/// Return an error if there is no question included in the message.
 fn question_from_message(message: &Message) -> DonutResult<(Name, RecordType)> {
     message
         .queries()
         .first()
         .map(|q| (q.name().clone(), q.query_type()))
         .ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "missing question")))
-}
-
-async fn read_from_body(body: Body, n: usize) -> DonutResult<Vec<u8>> {
-    body.map_err(DonutError::from)
-        .try_fold(Vec::new(), |mut acc, chunk| {
-            if chunk.len() + acc.len() > n {
-                return future::err(DonutError::from((ErrorKind::InputLength, "body too long")));
-            }
-
-            acc.extend_from_slice(&*chunk);
-            future::ok(acc)
-        })
-        .await
 }
