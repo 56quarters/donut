@@ -109,19 +109,15 @@ pub fn record_to_data(record: &Record) -> String {
         //RData::CAA(v) => ,
         RData::CNAME(v) => v.to_utf8(),
         RData::MX(v) => format!("{} {}", v.preference(), v.exchange()),
-        RData::NAPTR(v) => {
-            let order = v.order();
-            let pref = v.preference();
-            let flags = str::from_utf8(v.flags()).unwrap_or("");
-            let services = str::from_utf8(v.services()).unwrap_or("");
-            let regex = str::from_utf8(v.regexp()).unwrap_or("");
-            let replacement = v.replacement();
-
-            format!(
-                "{} {} \"{}\" \"{}\" \"{}\" {}",
-                order, pref, flags, services, regex, replacement
-            )
-        }
+        RData::NAPTR(v) => format!(
+            "{} {} \"{}\" \"{}\" \"{}\" {}",
+            v.order(),
+            v.preference(),
+            str::from_utf8(v.flags()).unwrap_or(""),
+            str::from_utf8(v.services()).unwrap_or(""),
+            str::from_utf8(v.regexp()).unwrap_or(""),
+            v.replacement(),
+        ),
         RData::NS(v) => v.to_utf8(),
         //RData::NULL(v) =>  ,
         //RData::OPENPGPKEY(v) => ,
