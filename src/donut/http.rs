@@ -140,7 +140,8 @@ fn render_ok(method: &Method, path: &str, accept: &str, meta: ResponseMetadata, 
 fn render_err(method: &Method, path: &str, accept: &str, err: DonutError) -> Response<Body> {
     let status_code = match err.kind() {
         ErrorKind::InputParsing | ErrorKind::InputSerialization => StatusCode::BAD_REQUEST,
-        ErrorKind::InputLength => StatusCode::PAYLOAD_TOO_LARGE,
+        ErrorKind::InputLengthBody => StatusCode::PAYLOAD_TOO_LARGE,
+        ErrorKind::InputLengthUri => StatusCode::URI_TOO_LONG,
         ErrorKind::DnsTimeout => StatusCode::SERVICE_UNAVAILABLE,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };

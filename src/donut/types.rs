@@ -46,7 +46,8 @@ enum ErrorRepr {
 pub enum ErrorKind {
     DnsInternal,
     DnsTimeout,
-    InputLength,
+    InputLengthBody,
+    InputLengthUri,
     InputParsing,
     InputSerialization,
     HttpInternal,

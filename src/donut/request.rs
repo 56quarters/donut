@@ -24,6 +24,9 @@ use trust_dns_client::proto::op::Message;
 use trust_dns_client::proto::serialize::binary::BinDecodable;
 use trust_dns_client::rr::{Name, RecordType};
 
+/// Max size for a DNS message in bytes (POST body or GET parameter after decoding)
+const MAX_MESSAGE_SIZE: usize = 512;
+
 ///
 ///
 ///
@@ -118,7 +121,17 @@ impl RequestParserWireGet {
             .get("dns")
             .ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "missing dns field")))
             .and_then(|d| base64::decode_config(d, base64::URL_SAFE_NO_PAD).map_err(DonutError::from))
-            .and_then(|b| Message::from_bytes(&b).map_err(DonutError::from))?;
+            .and_then(|b| {
+                // Ensure that size of the request (after base64 decoding) isn't longer
+                // than the max DNS message size that we allow (512 bytes, which matches
+                // the limit for POST requests).
+                if b.len() > MAX_MESSAGE_SIZE {
+                    Err(DonutError::from((ErrorKind::InputLengthUri, "uri too long")))
+                } else {
+                    Ok(b)
+                }
+            })
+            .and_then(|b| Message::from_vec(&b).map_err(DonutError::from))?;
 
         let (name, kind) = question_from_message(&message)?;
         Ok(DohRequest::new(name, kind, message.checking_disabled(), false))
@@ -134,15 +147,12 @@ pub struct RequestParserWirePost {
 }
 
 impl RequestParserWirePost {
-    /// Max size for a POST request body, in bytes.
-    const MAX_POST_SIZE: usize = 4096;
-
     /// Create a new POST request parers with the provided max body size limit.
     ///
-    /// If the limit is larger than 4k bytes, 4k bytes will be used as the max.
+    /// If the limit is larger than 512 bytes, 512 bytes will be used as the max.
     pub fn new(max_size: usize) -> Self {
         RequestParserWirePost {
-            max_size: Self::MAX_POST_SIZE.min(max_size),
+            max_size: MAX_MESSAGE_SIZE.min(max_size),
         }
     }
 
@@ -165,7 +175,7 @@ impl RequestParserWirePost {
         body.map_err(DonutError::from)
             .try_fold(Vec::new(), |mut acc, chunk| {
                 if chunk.len() + acc.len() > n {
-                    return future::err(DonutError::from((ErrorKind::InputLength, "body too long")));
+                    return future::err(DonutError::from((ErrorKind::InputLengthBody, "body too long")));
                 }
 
                 acc.extend_from_slice(&*chunk);
@@ -177,7 +187,7 @@ impl RequestParserWirePost {
 
 impl Default for RequestParserWirePost {
     fn default() -> Self {
-        Self::new(Self::MAX_POST_SIZE)
+        Self::new(MAX_MESSAGE_SIZE)
     }
 }
 
