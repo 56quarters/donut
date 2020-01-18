@@ -24,7 +24,6 @@ use donut::response::{ResponseEncoderJson, ResponseEncoderWire};
 use donut::types::DonutResult;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
-use rustls::ClientConfig as TlsClientConfig;
 use std::env;
 use std::net::SocketAddr;
 use std::process;
@@ -32,15 +31,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::UdpSocket;
 use tracing::{event, span, Level};
-use tracing_subscriber::EnvFilter;
 use trust_dns_client::client::AsyncClient;
 use trust_dns_client::proto::udp::UdpResponse;
-use trust_dns_client::proto::xfer::DnsMultiplexerSerialResponse;
 use trust_dns_client::udp::UdpClientStream;
-use trust_dns_rustls::tls_client_connect;
 
 const MAX_TERM_WIDTH: usize = 72;
-const LOG_ENV_VAR: &str = "DONUT_LOG_LEVEL";
 
 // Set up the default upstream DNS server. We do this instead of using the
 // `.default_value(...)` methods of clap because we need to mark the various
@@ -67,6 +62,15 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
                 .help("Timeout for upstream DNS server in milliseconds."),
         )
         .arg(
+            Arg::with_name("log-level")
+                .long("log-level")
+                .default_value("info")
+                .help(concat!(
+                    "Logging verbosity. Allowed values are 'trace', 'debug', 'info', 'warn', ",
+                    "and 'error' -- in decreasing order of verbosity"
+                )),
+        )
+        .arg(
             Arg::with_name("bind")
                 .long("bind")
                 .default_value("127.0.0.1:3000")
@@ -75,16 +79,13 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
         .get_matches_from(args)
 }
 
-#[allow(unused)]
-async fn new_tls_dns_client(
+/*
+async fn new_native_tls_dns_client(
     addr: SocketAddr,
     timeout: Duration,
     domain: String,
 ) -> DonutResult<AsyncClient<DnsMultiplexerSerialResponse>> {
-    unimplemented!();
-
-    let config = Arc::new(TlsClientConfig::default());
-    let (stream, handle) = tls_client_connect(addr, domain, config);
+    let (stream, handle) = TlsClientStreamBuilder::new().build(addr, domain);
     let (client, bg) = AsyncClient::with_timeout(stream, Box::new(handle), timeout, None).await?;
     // Trust DNS clients are really just handles for talking to a future running in the background
     // that actually does all the network activity and DNS lookups. Start the background future here
@@ -92,6 +93,9 @@ async fn new_tls_dns_client(
     tokio::spawn(bg);
     Ok(client)
 }
+let client = new_native_tls_dns_client(([8, 8, 8, 8], 853).into(), timeout, "dns.google".to_owned()).await?;
+let client = new_native_tls_dns_client(([1, 1, 1, 1], 853).into(), timeout, "cloudflare-dns.com".to_owned()).await?;
+*/
 
 async fn new_udp_dns_client(addr: SocketAddr, timeout: Duration) -> DonutResult<AsyncClient<UdpResponse>> {
     let conn = UdpClientStream::<UdpSocket>::with_timeout(addr, timeout);
@@ -135,12 +139,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     let matches = parse_cli_opts(args);
 
+    let log_level = value_t!(matches, "log-level", Level).unwrap_or_else(|e| e.exit());
     tracing::subscriber::set_global_default(
         tracing_subscriber::FmtSubscriber::builder()
-            .with_env_filter(EnvFilter::from_env(LOG_ENV_VAR))
+            .with_max_level(log_level)
             .finish(),
     )
     .expect("Failed to set tracing subscriber");
+
     let server_span = span!(Level::TRACE, "donut_server");
     let _server_span = server_span.enter();
 
