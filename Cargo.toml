@@ -1,6 +1,6 @@
 [package]
 name = "donut"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["TSH Labs"]
 description = "DNS over HTTPS server"
 homepage = "https://github.com/tshlabs/donut"
