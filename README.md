@@ -2,6 +2,8 @@
 
 DNS over HTTPS server.
 
+**WARNING**: This software is barely functional and certainly not ready for public use.
+
 ## Features
 
 TBD
