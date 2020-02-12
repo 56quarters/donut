@@ -23,7 +23,6 @@ use tracing::{event, Level};
 use trust_dns_client::client::{AsyncClient, ClientHandle};
 use trust_dns_client::op::DnsResponse;
 use trust_dns_client::proto::udp::UdpResponse;
-use trust_dns_client::proto::xfer::DnsMultiplexerSerialResponse;
 use trust_dns_client::rr::DNSClass;
 
 /// Facade over a Trust DNS `AsyncClient` instance (UDP or TCP).
@@ -51,25 +50,6 @@ impl AsyncClientAdapter for UdpAsyncClientAdapter {
 impl fmt::Debug for UdpAsyncClientAdapter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "UdpAsyncClientAdapter(AsyncClient<...>)")
-    }
-}
-
-/// Wrap an `AsyncClient` instance that uses TCP + TLS transport.
-struct TcpAsyncClientAdapter(AsyncClient<DnsMultiplexerSerialResponse>);
-
-#[async_trait]
-impl AsyncClientAdapter for TcpAsyncClientAdapter {
-    async fn resolve(&self, req: DohRequest) -> DonutResult<DnsResponse> {
-        // Note that we clone the client here because it requires a mutable reference and
-        // cloning is the simplest and way to do that (and it's reasonably performant).
-        let mut client = self.0.clone();
-        Ok(client.query(req.name, DNSClass::IN, req.kind).await?)
-    }
-}
-
-impl fmt::Debug for TcpAsyncClientAdapter {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TcpAsyncClientAdapter(AsyncClient<...>)")
     }
 }
 
@@ -105,14 +85,6 @@ impl From<AsyncClient<UdpResponse>> for MultiTransportResolver {
     fn from(client: AsyncClient<UdpResponse>) -> Self {
         MultiTransportResolver {
             delegate: Box::new(UdpAsyncClientAdapter(client)),
-        }
-    }
-}
-
-impl From<AsyncClient<DnsMultiplexerSerialResponse>> for MultiTransportResolver {
-    fn from(client: AsyncClient<DnsMultiplexerSerialResponse>) -> Self {
-        MultiTransportResolver {
-            delegate: Box::new(TcpAsyncClientAdapter(client)),
         }
     }
 }

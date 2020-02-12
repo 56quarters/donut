@@ -79,24 +79,6 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
         .get_matches_from(args)
 }
 
-/*
-async fn new_native_tls_dns_client(
-    addr: SocketAddr,
-    timeout: Duration,
-    domain: String,
-) -> DonutResult<AsyncClient<DnsMultiplexerSerialResponse>> {
-    let (stream, handle) = TlsClientStreamBuilder::new().build(addr, domain);
-    let (client, bg) = AsyncClient::with_timeout(stream, Box::new(handle), timeout, None).await?;
-    // Trust DNS clients are really just handles for talking to a future running in the background
-    // that actually does all the network activity and DNS lookups. Start the background future here
-    // on whatever Tokio executor has been set up when `main()` was run.
-    tokio::spawn(bg);
-    Ok(client)
-}
-let client = new_native_tls_dns_client(([8, 8, 8, 8], 853).into(), timeout, "dns.google".to_owned()).await?;
-let client = new_native_tls_dns_client(([1, 1, 1, 1], 853).into(), timeout, "cloudflare-dns.com".to_owned()).await?;
-*/
-
 async fn new_udp_dns_client(addr: SocketAddr, timeout: Duration) -> DonutResult<AsyncClient<UdpResponse>> {
     let conn = UdpClientStream::<UdpSocket>::with_timeout(addr, timeout);
     let (client, bg) = AsyncClient::connect(conn).await?;
