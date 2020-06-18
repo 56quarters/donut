@@ -17,9 +17,9 @@
 //
 
 use base64::DecodeError;
-use failure::{Backtrace, Fail};
 use hyper::Error as HyperError;
 use serde_json::Error as SerdeError;
+use std::error::Error;
 use std::fmt;
 use trust_dns_client::error::{
     ClientError as DnsClientError, ClientErrorKind as DnsClientErrorKind, ParseError as DnsParseError,
@@ -98,8 +98,8 @@ impl fmt::Display for DonutError {
     }
 }
 
-impl Fail for DonutError {
-    fn cause(&self) -> Option<&dyn Fail> {
+impl Error for DonutError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self.repr {
             ErrorRepr::Base64Error(ref e) => Some(e),
             ErrorRepr::DnsClientError(ref e) => Some(e),
@@ -107,18 +107,6 @@ impl Fail for DonutError {
             ErrorRepr::DnsProtoError(ref e) => Some(e),
             ErrorRepr::HttpError(ref e) => Some(e),
             ErrorRepr::SerializationError(ref e) => Some(e),
-            _ => None,
-        }
-    }
-
-    fn backtrace(&self) -> Option<&Backtrace> {
-        match self.repr {
-            ErrorRepr::Base64Error(ref e) => e.backtrace(),
-            ErrorRepr::DnsClientError(ref e) => e.backtrace(),
-            ErrorRepr::DnsParseError(ref e) => e.backtrace(),
-            ErrorRepr::DnsProtoError(ref e) => e.backtrace(),
-            ErrorRepr::HttpError(ref e) => e.backtrace(),
-            ErrorRepr::SerializationError(ref e) => e.backtrace(),
             _ => None,
         }
     }
