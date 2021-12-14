@@ -17,7 +17,7 @@
 //
 
 use crate::request::{RequestParserJsonGet, RequestParserWireGet, RequestParserWirePost};
-use crate::resolve::MultiTransportResolver;
+use crate::resolve::UdpResolver;
 use crate::response::{ResponseEncoderJson, ResponseEncoderWire, ResponseMetadata};
 use crate::types::{DonutError, ErrorKind};
 use futures_util::TryFutureExt;
@@ -34,7 +34,7 @@ pub struct HandlerContext {
     json_parser: RequestParserJsonGet,
     get_parser: RequestParserWireGet,
     post_parser: RequestParserWirePost,
-    resolver: MultiTransportResolver,
+    resolver: UdpResolver,
     json_encoder: ResponseEncoderJson,
     wire_encoder: ResponseEncoderWire,
 }
@@ -44,7 +44,7 @@ impl HandlerContext {
         json_parser: RequestParserJsonGet,
         get_parser: RequestParserWireGet,
         post_parser: RequestParserWirePost,
-        resolver: MultiTransportResolver,
+        resolver: UdpResolver,
         json_encoder: ResponseEncoderJson,
         wire_encoder: ResponseEncoderWire,
     ) -> Self {

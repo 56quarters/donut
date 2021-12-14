@@ -17,7 +17,6 @@
 //
 
 use crate::types::{DohRequest, DonutResult};
-use async_trait::async_trait;
 use std::fmt;
 use tracing::{event, Level};
 use trust_dns_client::client::{AsyncClient, ClientHandle};
@@ -25,46 +24,25 @@ use trust_dns_client::op::DnsResponse;
 use trust_dns_client::proto::udp::UdpResponse;
 use trust_dns_client::rr::DNSClass;
 
-/// Facade over a Trust DNS `AsyncClient` instance (UDP or TCP).
-///
-/// Used to abstract the type of the underlying transport used by the `AsyncClient` so
-/// that we can use the same code for making the request via `MultiTransportResolver`.
-#[async_trait]
-trait AsyncClientAdapter: Send + Sync {
-    async fn resolve(&self, req: DohRequest) -> DonutResult<DnsResponse>;
-}
-
-/// Wrap an `AsyncClient` instance that uses UDP transport.
-struct UdpAsyncClientAdapter(AsyncClient<UdpResponse>);
-
-#[async_trait]
-impl AsyncClientAdapter for UdpAsyncClientAdapter {
-    async fn resolve(&self, req: DohRequest) -> DonutResult<DnsResponse> {
-        // Note that we clone the client here because it requires a mutable reference and
-        // cloning is the simplest and way to do that (and it's reasonably performant).
-        let mut client = self.0.clone();
-        Ok(client.query(req.name, DNSClass::IN, req.kind).await?)
-    }
-}
-
-impl fmt::Debug for UdpAsyncClientAdapter {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "UdpAsyncClientAdapter(AsyncClient<...>)")
-    }
-}
-
-/// Use an `AsyncClientAdapter` implementation to perform DNS lookups asynchronously.
+/// Facade over a Trust DNS `AsyncClient` instance (UDP).
 ///
 /// Note that this struct is thread safe but does not implement `Clone`. It is meant to be
 /// used as part of a reference counted (`Arc`) context object that is shared between all
 /// requests, being handled on various threads.
-pub struct MultiTransportResolver {
-    delegate: Box<dyn AsyncClientAdapter>,
+pub struct UdpResolver {
+    client: AsyncClient<UdpResponse>,
 }
 
-impl MultiTransportResolver {
+impl UdpResolver {
+    pub fn new(client: AsyncClient<UdpResponse>) -> Self {
+        UdpResolver { client }
+    }
+
     pub async fn resolve(&self, req: DohRequest) -> DonutResult<DnsResponse> {
-        let res = self.delegate.resolve(req.clone()).await?;
+        // Note that we clone the client here because it requires a mutable reference and
+        // cloning is the simplest and way to do that (and it's reasonably performant).
+        let mut client = self.client.clone();
+        let res = client.query(req.name.clone(), DNSClass::IN, req.kind).await?;
         let code = res.response_code();
 
         event!(
@@ -81,16 +59,8 @@ impl MultiTransportResolver {
     }
 }
 
-impl From<AsyncClient<UdpResponse>> for MultiTransportResolver {
-    fn from(client: AsyncClient<UdpResponse>) -> Self {
-        MultiTransportResolver {
-            delegate: Box::new(UdpAsyncClientAdapter(client)),
-        }
-    }
-}
-
-impl fmt::Debug for MultiTransportResolver {
+impl fmt::Debug for UdpResolver {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "MultiTransportResolver {{ delegate: dyn AsyncClientAdapter(...) }}")
+        write!(f, "UdpResolver {{ client: AsyncClient(...) }}")
     }
 }

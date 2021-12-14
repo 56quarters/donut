@@ -53,7 +53,7 @@ impl RequestParserJsonGet {
         let kind = params
             .get("type")
             .ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "missing query type")))
-            .and_then(|s| Self::parse_requery_type(s))?;
+            .and_then(|s| Self::parse_query_type(s))?;
         let dnssec_data = params
             .get("do")
             .map(|s| (s == "1" || s.to_lowercase() == "true"))
@@ -77,7 +77,7 @@ impl RequestParserJsonGet {
     ///
     ///
     ///
-    fn parse_requery_type(kind: &str) -> DonutResult<RecordType> {
+    fn parse_query_type(kind: &str) -> DonutResult<RecordType> {
         let parsed_type: Option<RecordType> = kind
             // Attempt to parse the input string as a number (1..65535)
             .parse::<u16>()
@@ -113,8 +113,8 @@ impl RequestParserWireGet {
     ///
     ///
     pub async fn parse(&self, req: Request<Body>) -> DonutResult<DohRequest> {
-        let qs = req.uri().query().unwrap_or("").to_string();
-        let query = url::form_urlencoded::parse(qs.as_bytes());
+        let qs = req.uri().query().unwrap_or("").as_bytes();
+        let query = url::form_urlencoded::parse(qs);
         let params: HashMap<String, String> = query.into_owned().collect();
 
         let message = params

@@ -19,7 +19,7 @@
 use clap::{crate_version, value_t, App, Arg, ArgMatches};
 use donut::http::{http_route, HandlerContext};
 use donut::request::{RequestParserJsonGet, RequestParserWireGet, RequestParserWirePost};
-use donut::resolve::MultiTransportResolver;
+use donut::resolve::UdpResolver;
 use donut::response::{ResponseEncoderJson, ResponseEncoderWire};
 use donut::types::DonutResult;
 use hyper::service::{make_service_fn, service_fn};
@@ -91,7 +91,7 @@ async fn new_udp_dns_client(addr: SocketAddr, timeout: Duration) -> DonutResult<
 
 async fn new_handler_context(addr: SocketAddr, timeout: Duration) -> DonutResult<HandlerContext> {
     let client = new_udp_dns_client(addr, timeout).await?;
-    let resolver = MultiTransportResolver::from(client);
+    let resolver = UdpResolver::new(client);
     let json_parser = RequestParserJsonGet::default();
     let get_parser = RequestParserWireGet::default();
     let post_parser = RequestParserWirePost::default();
