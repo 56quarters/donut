@@ -42,8 +42,8 @@ impl RequestParserJsonGet {
     ///
     ///
     pub async fn parse(&self, req: Request<Body>) -> DonutResult<DohRequest> {
-        let qs = req.uri().query().unwrap_or("").to_string();
-        let query = url::form_urlencoded::parse(qs.as_bytes());
+        let qs = req.uri().query().unwrap_or("").as_bytes();
+        let query = url::form_urlencoded::parse(qs);
         let params: HashMap<String, String> = query.into_owned().collect();
 
         let name = params
