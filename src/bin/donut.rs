@@ -32,7 +32,6 @@ use std::time::Duration;
 use tokio::net::UdpSocket;
 use tracing::{event, span, Level};
 use trust_dns_client::client::AsyncClient;
-use trust_dns_client::proto::udp::UdpResponse;
 use trust_dns_client::udp::UdpClientStream;
 
 const MAX_TERM_WIDTH: usize = 72;
@@ -79,7 +78,7 @@ fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
         .get_matches_from(args)
 }
 
-async fn new_udp_dns_client(addr: SocketAddr, timeout: Duration) -> DonutResult<AsyncClient<UdpResponse>> {
+async fn new_udp_dns_client(addr: SocketAddr, timeout: Duration) -> DonutResult<AsyncClient> {
     let conn = UdpClientStream::<UdpSocket>::with_timeout(addr, timeout);
     let (client, bg) = AsyncClient::connect(conn).await?;
     // Trust DNS clients are really just handles for talking to a future running in the background
@@ -117,7 +116,7 @@ fn get_upstream(matches: &ArgMatches, param: &str) -> Option<Result<SocketAddr, 
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args: Vec<String> = env::args().collect();
     let matches = parse_cli_opts(args);
 

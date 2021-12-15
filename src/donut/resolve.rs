@@ -21,7 +21,6 @@ use std::fmt;
 use tracing::{event, Level};
 use trust_dns_client::client::{AsyncClient, ClientHandle};
 use trust_dns_client::op::DnsResponse;
-use trust_dns_client::proto::udp::UdpResponse;
 use trust_dns_client::rr::DNSClass;
 
 /// Facade over a Trust DNS `AsyncClient` instance (UDP).
@@ -30,11 +29,11 @@ use trust_dns_client::rr::DNSClass;
 /// used as part of a reference counted (`Arc`) context object that is shared between all
 /// requests, being handled on various threads.
 pub struct UdpResolver {
-    client: AsyncClient<UdpResponse>,
+    client: AsyncClient,
 }
 
 impl UdpResolver {
-    pub fn new(client: AsyncClient<UdpResponse>) -> Self {
+    pub fn new(client: AsyncClient) -> Self {
         UdpResolver { client }
     }
 
