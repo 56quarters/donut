@@ -16,12 +16,14 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use crate::types::{DohRequest, DonutError, DonutResult, ErrorKind};
+use crate::types::{DonutError, DonutResult, ErrorKind};
 use futures_util::{future, TryStreamExt};
 use hyper::{Body, Request};
 use std::collections::HashMap;
+use trust_dns_client::op::Query;
 use trust_dns_client::proto::op::Message;
 use trust_dns_client::proto::serialize::binary::BinDecodable;
+use trust_dns_client::proto::xfer::{DnsRequest, DnsRequestOptions};
 use trust_dns_client::rr::{Name, RecordType};
 
 /// Max size for a DNS message in bytes (POST body or GET parameter after decoding)
@@ -41,7 +43,7 @@ impl RequestParserJsonGet {
     ///
     ///
     ///
-    pub async fn parse(&self, req: Request<Body>) -> DonutResult<DohRequest> {
+    pub async fn parse(&self, req: Request<Body>) -> DonutResult<DnsRequest> {
         let qs = req.uri().query().unwrap_or("").as_bytes();
         let query = url::form_urlencoded::parse(qs);
         let params: HashMap<String, String> = query.into_owned().collect();
@@ -54,16 +56,22 @@ impl RequestParserJsonGet {
             .get("type")
             .ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "missing query type")))
             .and_then(|s| Self::parse_query_type(s))?;
-        let dnssec_data = params
-            .get("do")
-            .map(|s| (s == "1" || s.to_lowercase() == "true"))
-            .unwrap_or(false);
         let checking_disabled = params
             .get("cd")
             .map(|s| (s == "1" || s.to_lowercase() == "true"))
             .unwrap_or(false);
 
-        Ok(DohRequest::new(name, kind, checking_disabled, dnssec_data))
+        let mut message = Message::default();
+        message.add_query(Query::query(name, kind));
+        message.set_checking_disabled(checking_disabled);
+        message.set_recursion_desired(true);
+
+        let meta = DnsRequestOptions {
+            expects_multiple_responses: message.query_count() > 1,
+            ..Default::default()
+        };
+
+        Ok(DnsRequest::new(message, meta))
     }
 
     ///
@@ -112,7 +120,7 @@ impl RequestParserWireGet {
     ///
     ///
     ///
-    pub async fn parse(&self, req: Request<Body>) -> DonutResult<DohRequest> {
+    pub async fn parse(&self, req: Request<Body>) -> DonutResult<DnsRequest> {
         let qs = req.uri().query().unwrap_or("").as_bytes();
         let query = url::form_urlencoded::parse(qs);
         let params: HashMap<String, String> = query.into_owned().collect();
@@ -131,10 +139,18 @@ impl RequestParserWireGet {
                     Ok(b)
                 }
             })
-            .and_then(|b| Message::from_vec(&b).map_err(DonutError::from))?;
+            .and_then(|b| Message::from_vec(&b).map_err(DonutError::from))
+            .map(|mut m| {
+                m.set_recursion_desired(true);
+                m
+            })?;
 
-        let (name, kind) = question_from_message(&message)?;
-        Ok(DohRequest::new(name, kind, message.checking_disabled(), false))
+        let meta = DnsRequestOptions {
+            expects_multiple_responses: message.query_count() > 1,
+            ..Default::default()
+        };
+
+        Ok(DnsRequest::new(message, meta))
     }
 }
 
@@ -159,11 +175,17 @@ impl RequestParserWirePost {
     ///
     ///
     ///
-    pub async fn parse(&self, req: Request<Body>) -> DonutResult<DohRequest> {
+    pub async fn parse(&self, req: Request<Body>) -> DonutResult<DnsRequest> {
         let bytes = Self::read_from_body(req.into_body(), self.max_size).await?;
-        let message = Message::from_bytes(&bytes).map_err(DonutError::from)?;
-        let (name, kind) = question_from_message(&message)?;
-        Ok(DohRequest::new(name, kind, message.checking_disabled(), false))
+        let message = Message::from_bytes(&bytes).map_err(DonutError::from).map(|mut m| {
+            m.set_recursion_desired(true);
+            m
+        })?;
+        let meta = DnsRequestOptions {
+            expects_multiple_responses: message.query_count() > 1,
+            ..Default::default()
+        };
+        Ok(DnsRequest::new(message, meta))
     }
 
     /// Asynchronously read `n` bytes from the given body, consuming it.
@@ -189,17 +211,4 @@ impl Default for RequestParserWirePost {
     fn default() -> Self {
         Self::new(MAX_MESSAGE_SIZE)
     }
-}
-
-/// Get the first `Name` and `RecordType` from a given message question without consuming it
-///
-/// # Errors
-///
-/// Return an error if there is no question included in the message.
-fn question_from_message(message: &Message) -> DonutResult<(Name, RecordType)> {
-    message
-        .queries()
-        .first()
-        .map(|q| (q.name().clone(), q.query_type()))
-        .ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "missing question")))
 }

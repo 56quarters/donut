@@ -175,22 +175,3 @@ impl From<(ErrorKind, String)> for DonutError {
         }
     }
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DohRequest {
-    pub name: Name,
-    pub kind: RecordType,
-    pub checking_disabled: bool,
-    pub dnssec_data: bool,
-}
-
-impl DohRequest {
-    pub fn new(name: Name, kind: RecordType, checking_disabled: bool, dnssec_data: bool) -> Self {
-        DohRequest {
-            name,
-            kind,
-            checking_disabled,
-            dnssec_data,
-        }
-    }
-}
