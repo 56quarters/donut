@@ -43,7 +43,7 @@ impl UdpResolver {
         // cloning is the simplest and way to do that (and it's reasonably performant).
         let mut client = self.client.clone();
         // Clone the request and use a wrapper so that we can use 'Display' and defer it
-        // until needed by the tracing library (e.g. if log level is higher than INFO).
+        // until needed by the tracing library (e.g. only if log level is INFO or lower).
         let queries = QueryAdapter::new(req.clone());
         let res = client.send(req).await?;
         let code = res.response_code();
