@@ -23,6 +23,8 @@ use trust_dns_client::op::DnsResponse;
 use trust_dns_client::proto::serialize::binary::BinEncodable;
 use trust_dns_client::rr::{RData, Record};
 
+// TODO: These methods Should Just Work with multiple responses?
+
 ///
 ///
 ///
