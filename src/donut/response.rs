@@ -16,7 +16,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use crate::types::DonutResult;
+use crate::types::{DonutError, DonutResult, ErrorKind};
 use serde::Serialize;
 use std::str;
 use trust_dns_client::op::DnsResponse;
@@ -84,19 +84,20 @@ impl ResponseEncoderJson {
             })
             .collect();
 
-        Ok((
-            ResponseMetadata::from(&res),
-            serde_json::to_vec(&JsonResponse::new(
-                u16::from(res.response_code()),
-                res.truncated(),
-                res.recursion_desired(),
-                res.recursion_available(),
-                false,
-                true,
-                questions,
-                answers,
-            ))?,
+        let meta = ResponseMetadata::from(&res);
+        let bytes = serde_json::to_vec(&JsonResponse::new(
+            u16::from(res.response_code()),
+            res.truncated(),
+            res.recursion_desired(),
+            res.recursion_available(),
+            false,
+            true,
+            questions,
+            answers,
         ))
+        .map_err(|e| DonutError::from((ErrorKind::Internal, "unable to serialize to response", Box::new(e))))?;
+
+        Ok((meta, bytes))
     }
 }
 

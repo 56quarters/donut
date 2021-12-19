@@ -16,42 +16,26 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use base64::DecodeError;
-use hyper::Error as HyperError;
-use serde_json::Error as SerdeError;
 use std::error::Error;
 use std::fmt;
-use trust_dns_client::error::{
-    ClientError as DnsClientError, ClientErrorKind as DnsClientErrorKind, ParseError as DnsParseError,
-    ParseErrorKind as DnsParseErrorKind,
-};
 use trust_dns_client::proto::error::{ProtoError as DnsProtoError, ProtoErrorKind as DnsProtoErrorKind};
-use trust_dns_client::rr::{Name, RecordType};
 
 pub type DonutResult<T> = Result<T, DonutError>;
 
 #[derive(Debug)]
 enum ErrorRepr {
-    Base64Error(DecodeError),
-    DnsClientError(DnsClientError),
-    DnsParseError(DnsParseError),
     DnsProtoError(DnsProtoError),
-    HttpError(HyperError),
-    SerializationError(SerdeError),
-    WithMessageStr(ErrorKind, &'static str),
-    WithMessageString(ErrorKind, String),
+    KindMsg(ErrorKind, &'static str),
+    KindMsgCause(ErrorKind, &'static str, Box<dyn Error + Send + Sync>),
 }
 
 #[derive(PartialEq, Eq, Debug, Hash, Clone, Copy)]
 pub enum ErrorKind {
-    DnsInternal,
-    DnsTimeout,
-    InputLengthBody,
-    InputLengthUri,
-    InputParsing,
-    InputSerialization,
-    HttpInternal,
-    OutputSerialization,
+    Internal,
+    Timeout,
+    InputInvalid,
+    InputBodyTooLong,
+    InputUriTooLong,
 }
 
 #[derive(Debug)]
@@ -62,23 +46,12 @@ pub struct DonutError {
 impl DonutError {
     pub fn kind(&self) -> ErrorKind {
         match self.repr {
-            ErrorRepr::Base64Error(_) => ErrorKind::InputSerialization,
-            ErrorRepr::DnsClientError(ref e) => match e.kind() {
-                DnsClientErrorKind::Timeout => ErrorKind::DnsTimeout,
-                _ => ErrorKind::DnsInternal,
-            },
-            ErrorRepr::DnsParseError(ref e) => match e.kind() {
-                DnsParseErrorKind::Timeout => ErrorKind::DnsTimeout,
-                _ => ErrorKind::DnsInternal,
-            },
             ErrorRepr::DnsProtoError(ref e) => match e.kind() {
-                DnsProtoErrorKind::Timeout => ErrorKind::DnsTimeout,
-                _ => ErrorKind::DnsInternal,
+                DnsProtoErrorKind::Timeout => ErrorKind::Timeout,
+                _ => ErrorKind::Internal,
             },
-            ErrorRepr::HttpError(_) => ErrorKind::HttpInternal,
-            ErrorRepr::SerializationError(_) => ErrorKind::OutputSerialization,
-            ErrorRepr::WithMessageStr(kind, _) => kind,
-            ErrorRepr::WithMessageString(kind, _) => kind,
+            ErrorRepr::KindMsg(kind, _) => kind,
+            ErrorRepr::KindMsgCause(kind, _, _) => kind,
         }
     }
 }
@@ -86,14 +59,9 @@ impl DonutError {
 impl fmt::Display for DonutError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self.repr {
-            ErrorRepr::Base64Error(ref e) => e.fmt(f),
-            ErrorRepr::DnsClientError(ref e) => e.fmt(f),
-            ErrorRepr::DnsParseError(ref e) => e.fmt(f),
-            ErrorRepr::DnsProtoError(ref e) => e.fmt(f),
-            ErrorRepr::HttpError(ref e) => e.fmt(f),
-            ErrorRepr::SerializationError(ref e) => e.fmt(f),
-            ErrorRepr::WithMessageStr(_, msg) => msg.fmt(f),
-            ErrorRepr::WithMessageString(_, ref msg) => msg.fmt(f),
+            ErrorRepr::DnsProtoError(ref e) => write!(f, "DNS error: {}", e),
+            ErrorRepr::KindMsg(_, msg) => msg.fmt(f),
+            ErrorRepr::KindMsgCause(_, msg, ref e) => write!(f, "{}: {}", msg, e),
         }
     }
 }
@@ -101,41 +69,17 @@ impl fmt::Display for DonutError {
 impl Error for DonutError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self.repr {
-            ErrorRepr::Base64Error(ref e) => Some(e),
-            ErrorRepr::DnsClientError(ref e) => Some(e),
-            ErrorRepr::DnsParseError(ref e) => Some(e),
             ErrorRepr::DnsProtoError(ref e) => Some(e),
-            ErrorRepr::HttpError(ref e) => Some(e),
-            ErrorRepr::SerializationError(ref e) => Some(e),
+            ErrorRepr::KindMsgCause(_, _, ref e) => Some(e.as_ref()),
             _ => None,
         }
     }
 }
 
-impl From<DecodeError> for DonutError {
-    fn from(e: DecodeError) -> Self {
-        DonutError {
-            repr: ErrorRepr::Base64Error(e),
-        }
-    }
-}
-
-impl From<DnsClientError> for DonutError {
-    fn from(e: DnsClientError) -> Self {
-        DonutError {
-            repr: ErrorRepr::DnsClientError(e),
-        }
-    }
-}
-
-impl From<DnsParseError> for DonutError {
-    fn from(e: DnsParseError) -> Self {
-        DonutError {
-            repr: ErrorRepr::DnsParseError(e),
-        }
-    }
-}
-
+// Dedicated `From` implementation for DNS related errors since they can be
+// related to timeouts talking to upstream servers or other reasons. We need
+// to be able differentiate between these cases so centralizing that logic
+// here is the best way to do that.
 impl From<DnsProtoError> for DonutError {
     fn from(e: DnsProtoError) -> Self {
         DonutError {
@@ -144,34 +88,21 @@ impl From<DnsProtoError> for DonutError {
     }
 }
 
-impl From<HyperError> for DonutError {
-    fn from(e: HyperError) -> Self {
-        DonutError {
-            repr: ErrorRepr::HttpError(e),
-        }
-    }
-}
-
-impl From<SerdeError> for DonutError {
-    fn from(e: SerdeError) -> Self {
-        DonutError {
-            repr: ErrorRepr::SerializationError(e),
-        }
-    }
-}
-
 impl From<(ErrorKind, &'static str)> for DonutError {
     fn from((kind, msg): (ErrorKind, &'static str)) -> Self {
         DonutError {
-            repr: ErrorRepr::WithMessageStr(kind, msg),
+            repr: ErrorRepr::KindMsg(kind, msg),
         }
     }
 }
 
-impl From<(ErrorKind, String)> for DonutError {
-    fn from((kind, msg): (ErrorKind, String)) -> Self {
+impl<E> From<(ErrorKind, &'static str, E)> for DonutError
+where
+    E: Error + Send + Sync + 'static,
+{
+    fn from((kind, msg, e): (ErrorKind, &'static str, E)) -> Self {
         DonutError {
-            repr: ErrorRepr::WithMessageString(kind, msg),
+            repr: ErrorRepr::KindMsgCause(kind, msg, Box::new(e)),
         }
     }
 }

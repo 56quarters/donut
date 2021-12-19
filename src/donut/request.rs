@@ -50,11 +50,11 @@ impl RequestParserJsonGet {
 
         let name = params
             .get("name")
-            .ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "missing query name")))
+            .ok_or_else(|| DonutError::from((ErrorKind::InputInvalid, "missing query name")))
             .and_then(|s| Self::parse_query_name(s))?;
         let kind = params
             .get("type")
-            .ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "missing query type")))
+            .ok_or_else(|| DonutError::from((ErrorKind::InputInvalid, "missing query type")))
             .and_then(|s| Self::parse_query_type(s))?;
         let checking_disabled = params
             .get("cd")
@@ -79,7 +79,7 @@ impl RequestParserJsonGet {
     ///
     fn parse_query_name(name: &str) -> DonutResult<Name> {
         name.parse()
-            .map_err(|_| DonutError::from((ErrorKind::InputParsing, "invalid query name")))
+            .map_err(|_| DonutError::from((ErrorKind::InputInvalid, "invalid query name")))
     }
 
     ///
@@ -99,7 +99,7 @@ impl RequestParserJsonGet {
             // If it wasn't a number, try to parse it as a string (A, AAAA, etc).
             .or_else(|| kind.to_uppercase().parse().ok());
 
-        parsed_type.ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "invalid query type")))
+        parsed_type.ok_or_else(|| DonutError::from((ErrorKind::InputInvalid, "invalid query type")))
     }
 }
 
@@ -127,19 +127,25 @@ impl RequestParserWireGet {
 
         let message = params
             .get("dns")
-            .ok_or_else(|| DonutError::from((ErrorKind::InputParsing, "missing dns field")))
-            .and_then(|d| base64::decode_config(d, base64::URL_SAFE_NO_PAD).map_err(DonutError::from))
+            .ok_or_else(|| DonutError::from((ErrorKind::InputInvalid, "missing 'dns' field")))
+            .and_then(|d| {
+                base64::decode_config(d, base64::URL_SAFE_NO_PAD)
+                    .map_err(|e| DonutError::from((ErrorKind::InputInvalid, "invalid base64 value", Box::new(e))))
+            })
             .and_then(|b| {
                 // Ensure that size of the request (after base64 decoding) isn't longer
                 // than the max DNS message size that we allow (512 bytes, which matches
                 // the limit for POST requests).
                 if b.len() > MAX_MESSAGE_SIZE {
-                    Err(DonutError::from((ErrorKind::InputLengthUri, "uri too long")))
+                    Err(DonutError::from((ErrorKind::InputUriTooLong, "URI too long")))
                 } else {
                     Ok(b)
                 }
             })
-            .and_then(|b| Message::from_vec(&b).map_err(DonutError::from))
+            .and_then(|b| {
+                Message::from_vec(&b)
+                    .map_err(|e| DonutError::from((ErrorKind::InputInvalid, "invalid DNS message", Box::new(e))))
+            })
             .map(|mut m| {
                 m.set_recursion_desired(true);
                 m
@@ -194,10 +200,10 @@ impl RequestParserWirePost {
     ///
     /// Return an error if the body is longer than `n` bytes.
     async fn read_from_body(body: Body, n: usize) -> DonutResult<Vec<u8>> {
-        body.map_err(DonutError::from)
+        body.map_err(|e| DonutError::from((ErrorKind::Internal, "cannot read HTTP body", Box::new(e))))
             .try_fold(Vec::new(), |mut acc, chunk| {
                 if chunk.len() + acc.len() > n {
-                    return future::err(DonutError::from((ErrorKind::InputLengthBody, "body too long")));
+                    return future::err(DonutError::from((ErrorKind::InputBodyTooLong, "body too long")));
                 }
 
                 acc.extend_from_slice(&*chunk);
