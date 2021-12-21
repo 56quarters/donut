@@ -44,12 +44,12 @@ impl UdpResolver {
         let mut client = self.client.clone();
         // Clone the request and use a wrapper so that we can use 'Display' and defer it
         // until needed by the tracing library (e.g. only if log level is INFO or lower).
-        let queries = QueryAdapter::new(req.clone());
+        let queries = QueryDisplay::new(req.clone());
         let res = client.send(req).await?;
         let code = res.response_code();
 
         event!(
-            target: "donut_lookup",
+            target: "donut_dns",
             Level::INFO,
             queries = %queries,
             results = res.answer_count(),
@@ -67,17 +67,17 @@ impl fmt::Debug for UdpResolver {
     }
 }
 
-struct QueryAdapter {
+struct QueryDisplay {
     msg: DnsRequest,
 }
 
-impl QueryAdapter {
+impl QueryDisplay {
     fn new(msg: DnsRequest) -> Self {
-        QueryAdapter { msg }
+        QueryDisplay { msg }
     }
 }
 
-impl fmt::Display for QueryAdapter {
+impl fmt::Display for QueryDisplay {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, q) in self.msg.queries().iter().enumerate() {
             if i > 0 {

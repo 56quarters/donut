@@ -68,11 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             } else {
                 b
             }
-        })
-        // TODO: Our error type doesn't implement Error (only Fail) and
-        //  there are conflicting traits when we try (failure seems to have
-        //  a default impl... but we still get type errors here with `?`).
-        .unwrap();
+        })?;
 
     let mut stdout = io::stdout();
     stdout.write_all(&bytes)?;

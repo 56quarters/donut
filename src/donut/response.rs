@@ -23,11 +23,6 @@ use trust_dns_client::op::DnsResponse;
 use trust_dns_client::proto::serialize::binary::BinEncodable;
 use trust_dns_client::rr::{RData, Record};
 
-// TODO: These methods Should Just Work with multiple responses?
-
-///
-///
-///
 #[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub struct ResponseMetadata {
     min_ttl: Option<u32>,
@@ -46,23 +41,14 @@ impl From<&DnsResponse> for ResponseMetadata {
     }
 }
 
-///
-///
-///
 #[derive(Debug, Default, Clone)]
 pub struct ResponseEncoderJson;
 
 impl ResponseEncoderJson {
-    ///
-    ///
-    ///
     pub fn new() -> Self {
         ResponseEncoderJson
     }
 
-    ///
-    ///
-    ///
     pub async fn encode(&self, res: DnsResponse) -> DonutResult<(ResponseMetadata, Vec<u8>)> {
         let questions: Vec<JsonQuestion> = res
             .queries()
@@ -91,7 +77,7 @@ impl ResponseEncoderJson {
             res.recursion_desired(),
             res.recursion_available(),
             false,
-            true,
+            res.checking_disabled(),
             questions,
             answers,
         ))
@@ -101,9 +87,6 @@ impl ResponseEncoderJson {
     }
 }
 
-///
-///
-///
 pub fn record_to_data(record: &Record) -> String {
     match record.rdata() {
         RData::A(v) => v.to_string(),
@@ -254,23 +237,14 @@ impl JsonResponse {
     }
 }
 
-///
-///
-///
 #[derive(Debug, Default, Clone)]
 pub struct ResponseEncoderWire;
 
 impl ResponseEncoderWire {
-    ///
-    ///
-    ///
     pub fn new() -> Self {
         ResponseEncoderWire
     }
 
-    ///
-    ///
-    ///
     pub async fn encode(&self, res: DnsResponse) -> DonutResult<(ResponseMetadata, Vec<u8>)> {
         Ok((ResponseMetadata::from(&res), res.to_bytes()?))
     }

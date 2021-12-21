@@ -20,7 +20,8 @@ use crate::types::{DonutError, DonutResult, ErrorKind};
 use futures_util::{future, TryStreamExt};
 use hyper::{Body, Request};
 use std::collections::HashMap;
-use trust_dns_client::op::Query;
+use tracing::{event, span, Instrument, Level};
+use trust_dns_client::op::{MessageType, OpCode, Query};
 use trust_dns_client::proto::op::Message;
 use trust_dns_client::proto::serialize::binary::BinDecodable;
 use trust_dns_client::proto::xfer::{DnsRequest, DnsRequestOptions};
@@ -29,9 +30,6 @@ use trust_dns_client::rr::{Name, RecordType};
 /// Max size for a DNS message in bytes (POST body or GET parameter after decoding)
 const MAX_MESSAGE_SIZE: usize = 512;
 
-///
-///
-///
 #[derive(Debug, Default, Clone)]
 pub struct RequestParserJsonGet;
 
@@ -40,9 +38,6 @@ impl RequestParserJsonGet {
         RequestParserJsonGet
     }
 
-    ///
-    ///
-    ///
     pub async fn parse(&self, req: Request<Body>) -> DonutResult<DnsRequest> {
         let qs = req.uri().query().unwrap_or("").as_bytes();
         let query = url::form_urlencoded::parse(qs);
@@ -65,6 +60,15 @@ impl RequestParserJsonGet {
         message.add_query(Query::query(name, kind));
         message.set_checking_disabled(checking_disabled);
         message.set_recursion_desired(true);
+        message = validate_message(message)?;
+
+        event!(
+            target: "donut_parser_json",
+            Level::TRACE,
+            message = "parsed query params as DNS message",
+            message_type = ?message.message_type(),
+            query_count = message.query_count(),
+        );
 
         let meta = DnsRequestOptions {
             expects_multiple_responses: message.query_count() > 1,
@@ -74,17 +78,11 @@ impl RequestParserJsonGet {
         Ok(DnsRequest::new(message, meta))
     }
 
-    ///
-    ///
-    ///
     fn parse_query_name(name: &str) -> DonutResult<Name> {
         name.parse()
             .map_err(|_| DonutError::from((ErrorKind::InputInvalid, "invalid query name")))
     }
 
-    ///
-    ///
-    ///
     fn parse_query_type(kind: &str) -> DonutResult<RecordType> {
         let parsed_type: Option<RecordType> = kind
             // Attempt to parse the input string as a number (1..65535)
@@ -103,29 +101,20 @@ impl RequestParserJsonGet {
     }
 }
 
-///
-///
-///
 #[derive(Debug, Default, Clone)]
 pub struct RequestParserWireGet;
 
 impl RequestParserWireGet {
-    ///
-    ///
-    ///
     pub fn new() -> Self {
         RequestParserWireGet
     }
 
-    ///
-    ///
-    ///
     pub async fn parse(&self, req: Request<Body>) -> DonutResult<DnsRequest> {
         let qs = req.uri().query().unwrap_or("").as_bytes();
         let query = url::form_urlencoded::parse(qs);
         let params: HashMap<String, String> = query.into_owned().collect();
 
-        let message = params
+        let bytes = params
             .get("dns")
             .ok_or_else(|| DonutError::from((ErrorKind::InputInvalid, "missing 'dns' field")))
             .and_then(|d| {
@@ -141,15 +130,31 @@ impl RequestParserWireGet {
                 } else {
                     Ok(b)
                 }
-            })
-            .and_then(|b| {
-                Message::from_vec(&b)
-                    .map_err(|e| DonutError::from((ErrorKind::InputInvalid, "invalid DNS message", Box::new(e))))
-            })
+            })?;
+
+        event!(
+            target: "donut_parser_get",
+            Level::TRACE,
+            message = "parsed base64 bytes",
+            num_bytes = bytes.len(),
+        );
+
+        let message = Message::from_vec(&bytes)
+            // Any errors while parsing a DNS Message get mapped to invalid input
+            .map_err(|e| DonutError::from((ErrorKind::InputInvalid, "invalid DNS message", Box::new(e))))
             .map(|mut m| {
                 m.set_recursion_desired(true);
                 m
-            })?;
+            })
+            .and_then(validate_message)?;
+
+        event!(
+            target: "donut_parser_get",
+            Level::TRACE,
+            message = "parsed bytes as DNS message",
+            message_type = ?message.message_type(),
+            query_count = message.query_count(),
+        );
 
         let meta = DnsRequestOptions {
             expects_multiple_responses: message.query_count() > 1,
@@ -160,45 +165,51 @@ impl RequestParserWireGet {
     }
 }
 
-///
-///
-///
-#[derive(Debug, Clone)]
-pub struct RequestParserWirePost {
-    max_size: usize,
-}
+#[derive(Debug, Default, Clone)]
+pub struct RequestParserWirePost;
 
 impl RequestParserWirePost {
-    /// Create a new POST request parers with the provided max body size limit.
-    ///
-    /// If the limit is larger than 512 bytes, 512 bytes will be used as the max.
-    pub fn new(max_size: usize) -> Self {
-        RequestParserWirePost {
-            max_size: MAX_MESSAGE_SIZE.min(max_size),
-        }
+    pub fn new() -> Self {
+        RequestParserWirePost
     }
 
-    ///
-    ///
-    ///
     pub async fn parse(&self, req: Request<Body>) -> DonutResult<DnsRequest> {
-        let bytes = Self::read_from_body(req.into_body(), self.max_size).await?;
-        let message = Message::from_bytes(&bytes).map_err(DonutError::from).map(|mut m| {
-            m.set_recursion_desired(true);
-            m
-        })?;
+        let bytes = Self::read_from_body(req.into_body(), MAX_MESSAGE_SIZE)
+            .instrument(span!(Level::TRACE, "read_from_body"))
+            .await?;
+
+        event!(
+            target: "donut_parser_post",
+            Level::TRACE,
+            message = "parsed body as bytes",
+            num_bytes = bytes.len(),
+        );
+
+        let message = Message::from_bytes(&bytes)
+            // Any errors while parsing a DNS Message get mapped to invalid input
+            .map_err(|e| DonutError::from((ErrorKind::InputInvalid, "invalid DNS message", Box::new(e))))
+            .map(|mut m| {
+                m.set_recursion_desired(true);
+                m
+            })
+            .and_then(validate_message)?;
+
+        event!(
+            target: "donut_parser_post",
+            Level::TRACE,
+            message = "parsed bytes as DNS message",
+            message_type = ?message.message_type(),
+            query_count = message.query_count(),
+        );
+
         let meta = DnsRequestOptions {
             expects_multiple_responses: message.query_count() > 1,
             ..Default::default()
         };
+
         Ok(DnsRequest::new(message, meta))
     }
 
-    /// Asynchronously read `n` bytes from the given body, consuming it.
-    ///
-    /// # Errors
-    ///
-    /// Return an error if the body is longer than `n` bytes.
     async fn read_from_body(body: Body, n: usize) -> DonutResult<Vec<u8>> {
         body.map_err(|e| DonutError::from((ErrorKind::Internal, "cannot read HTTP body", Box::new(e))))
             .try_fold(Vec::new(), |mut acc, chunk| {
@@ -213,8 +224,18 @@ impl RequestParserWirePost {
     }
 }
 
-impl Default for RequestParserWirePost {
-    fn default() -> Self {
-        Self::new(MAX_MESSAGE_SIZE)
+/// Perform extra semantic validation of DNS Messages
+fn validate_message(message: Message) -> DonutResult<Message> {
+    if message.message_type() != MessageType::Query || message.op_code() != OpCode::Query {
+        return Err(DonutError::from((
+            ErrorKind::InputInvalid,
+            "invalid message type or op code",
+        )));
     }
+
+    if message.query_count() == 0 {
+        return Err(DonutError::from((ErrorKind::InputInvalid, "no DNS queries in message")));
+    }
+
+    Ok(message)
 }
