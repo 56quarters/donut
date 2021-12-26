@@ -107,7 +107,7 @@ async fn new_handler_context(addr: SocketAddr, timeout: Duration) -> DonutResult
     ))
 }
 
-fn get_upstream(matches: &ArgMatches, param: &str) -> Option<Result<SocketAddr, clap::Error>> {
+fn get_upstream(matches: &ArgMatches<'_>, param: &str) -> Option<Result<SocketAddr, clap::Error>> {
     match value_t!(matches, param, SocketAddr) {
         Err(e) if e.kind == clap::ErrorKind::ArgumentNotFound => None,
         Err(e) => Some(Err(e)),
