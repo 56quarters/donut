@@ -30,7 +30,7 @@ use std::process;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::UdpSocket;
-use tracing::{event, span, Level};
+use tracing::{event, span, Instrument, Level};
 use trust_dns_client::client::AsyncClient;
 use trust_dns_client::udp::UdpClientStream;
 
@@ -128,9 +128,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )
     .expect("Failed to set tracing subscriber");
 
-    let server_span = span!(Level::TRACE, "donut_server");
-    let _server_span = server_span.enter();
-
     let upstream = match get_upstream(&matches, "upstream-udp") {
         Some(Ok(v)) => v,
         Some(Err(e)) => e.exit(),
@@ -143,18 +140,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let context = Arc::new(new_handler_context(upstream, timeout).await.unwrap());
     let service = make_service_fn(move |_| {
-        let service_span = span!(Level::TRACE, "donut_service");
-        let service_span_id = service_span.id();
-        let _service_span = service_span.enter();
         let context = context.clone();
 
         async move {
             Ok::<_, hyper::Error>(service_fn(move |req| {
-                let request_span = span!(Level::TRACE, "donut_request");
-                request_span.follows_from(service_span_id.clone());
-                let _request_span = request_span.enter();
-
-                http_route(req, context.clone())
+                http_route(req, context.clone()).instrument(span!(Level::DEBUG, "donut::request"))
             }))
         }
     });

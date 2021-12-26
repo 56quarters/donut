@@ -24,7 +24,7 @@ use futures_util::TryFutureExt;
 use hyper::header::{ACCEPT, CACHE_CONTROL, CONTENT_TYPE};
 use hyper::{Body, Method, Request, Response, StatusCode};
 use std::sync::Arc;
-use tracing::{event, Level};
+use tracing::{event, span, Instrument, Level};
 
 const WIRE_MESSAGE_FORMAT: &str = "application/dns-message";
 const JSON_MESSAGE_FORMAT: &str = "application/dns-json";
@@ -77,24 +77,33 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
             context
                 .json_parser
                 .parse(req)
+                .instrument(span!(Level::DEBUG, "donut::parse::json"))
                 .and_then(|r| context.resolver.resolve(r))
+                .instrument(span!(Level::DEBUG, "donut::resolve::udp"))
                 .and_then(|r| context.json_encoder.encode(r))
+                .instrument(span!(Level::DEBUG, "donut::encode::json"))
                 .await
         }
         (&Method::GET, "/dns-query", WIRE_MESSAGE_FORMAT) => {
             context
                 .get_parser
                 .parse(req)
+                .instrument(span!(Level::DEBUG, "donut::parse::get"))
                 .and_then(|r| context.resolver.resolve(r))
+                .instrument(span!(Level::DEBUG, "donut::resolve::udp"))
                 .and_then(|r| context.wire_encoder.encode(r))
+                .instrument(span!(Level::DEBUG, "donut::encode::wire"))
                 .await
         }
         (&Method::POST, "/dns-query", WIRE_MESSAGE_FORMAT) => {
             context
                 .post_parser
                 .parse(req)
+                .instrument(span!(Level::DEBUG, "donut::parse::post"))
                 .and_then(|r| context.resolver.resolve(r))
+                .instrument(span!(Level::DEBUG, "donut::resolve::udp"))
                 .and_then(|r| context.wire_encoder.encode(r))
+                .instrument(span!(Level::DEBUG, "donut::encode::wire"))
                 .await
         }
 
@@ -110,12 +119,9 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
         .unwrap_or_else(|e| render_err(&method, &path, &accept, e)))
 }
 
-///
-///
-///
 fn render_ok(method: &Method, path: &str, accept: &str, meta: ResponseMetadata, bytes: Vec<u8>) -> Response<Body> {
     event!(
-        target: "donut_request",
+        target: "donut_http",
         Level::INFO,
         method = %method,
         path = %path,
@@ -134,9 +140,6 @@ fn render_ok(method: &Method, path: &str, accept: &str, meta: ResponseMetadata, 
     builder.body(Body::from(bytes)).unwrap()
 }
 
-///
-///
-///
 fn render_err(method: &Method, path: &str, accept: &str, err: DonutError) -> Response<Body> {
     let status_code = match err.kind() {
         ErrorKind::InputInvalid => StatusCode::BAD_REQUEST,
@@ -147,7 +150,7 @@ fn render_err(method: &Method, path: &str, accept: &str, err: DonutError) -> Res
     };
 
     event!(
-        target: "donut_request",
+        target: "donut_http",
         Level::ERROR,
         method = %method,
         path = %path,
@@ -160,9 +163,6 @@ fn render_err(method: &Method, path: &str, accept: &str, err: DonutError) -> Res
     http_status_no_body(status_code)
 }
 
-///
-///
-///
 fn http_status_no_body(code: StatusCode) -> Response<Body> {
     Response::builder().status(code).body(Body::empty()).unwrap()
 }
