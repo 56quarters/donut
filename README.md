@@ -27,3 +27,13 @@ TBD
 ## Advanced
 
 TBD
+
+## License
+
+Donut is available under the terms of the [GPL, version 3](LICENSE).
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you shall be licensed as above, without any
+additional terms or conditions.
