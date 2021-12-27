@@ -16,22 +16,19 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use clap::{crate_version, App, ArgMatches};
+use clap::{crate_version, Parser};
 use std::env;
 use std::fmt::Write;
 use std::io::{self, Read};
 use trust_dns_client::op::Message;
 use trust_dns_client::rr::Record;
 
-const MAX_TERM_WIDTH: usize = 72;
-
-fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
-    App::new("Donut DNS binary to text util")
-        .version(crate_version!())
-        .set_term_width(MAX_TERM_WIDTH)
-        .about("\nConvert binary DNS responses on STDIN to a dig-like text format")
-        .get_matches_from(args)
-}
+/// Donut DNS binary to text util
+///
+/// Convert binary DNS responses on STDIN to a dig-like text format
+#[derive(Debug, Parser)]
+#[clap(name = "donut", version = crate_version!())]
+struct Bin2DnsApplication;
 
 fn format_question(buf: &mut String, mes: &Message) {
     let _ = writeln!(buf, ";; QUESTION SECTION:");
@@ -85,8 +82,7 @@ fn format_message(mes: &Message) -> String {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let args: Vec<String> = env::args().collect();
-    let _ = parse_cli_opts(args);
+    let _opts = Bin2DnsApplication::parse();
 
     let mut buf = Vec::new();
     let mut stdin = io::stdin();

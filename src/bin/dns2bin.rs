@@ -16,54 +16,39 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use clap::{crate_version, value_t_or_exit, App, Arg, ArgMatches};
+use clap::{crate_version, Parser};
 use std::env;
 use std::io::{self, Write};
 use trust_dns_client::op::{Message, Query};
 use trust_dns_client::rr::{Name, RecordType};
 use trust_dns_client::serialize::binary::BinEncodable;
 
-const MAX_TERM_WIDTH: usize = 72;
+/// Donut DNS request to binary util
+///
+/// Output a DNS request in base64 or binary representation
+#[derive(Debug, Parser)]
+#[clap(name = "donut", version = crate_version!())]
+struct Dns2BinApplication {
+    /// Output raw binary (instead of base64 text)
+    #[clap(long = "raw", short = 'r')]
+    raw: bool,
 
-fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
-    App::new("Donut DNS request to binary util")
-        .version(crate_version!())
-        .set_term_width(MAX_TERM_WIDTH)
-        .about("\nOutput a DNS request in base64 or binary representation")
-        .arg(
-            Arg::with_name("raw")
-                .short("r")
-                .long("raw")
-                .help("Output raw binary (instead of base64)"),
-        )
-        .arg(
-            Arg::with_name("type")
-                .short("t")
-                .long("type")
-                .default_value("A")
-                .help("Record type to lookup"),
-        )
-        .arg(
-            Arg::with_name("name")
-                .help("Domain name to generate a binary request for")
-                .index(1),
-        )
-        .get_matches_from(args)
+    /// Record type to lookup
+    #[clap(long = "type", short = 't', default_value_t = RecordType::A)]
+    type_: RecordType,
+
+    /// Domain name to generate a binary request for
+    name: Name,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let args: Vec<String> = env::args().collect();
-    let matches = parse_cli_opts(args);
-
-    let raw = matches.is_present("raw");
-    let name = value_t_or_exit!(matches, "name", Name);
-    let record_type = value_t_or_exit!(matches, "type", RecordType);
+    let opts = Dns2BinApplication::parse();
 
     let bytes = Message::new()
-        .add_query(Query::query(name, record_type))
+        .add_query(Query::query(opts.name.clone(), opts.type_))
         .to_bytes()
         .map(|b| {
-            if !raw {
+            if !opts.raw {
                 base64::encode_config(&b, base64::URL_SAFE_NO_PAD).into_bytes()
             } else {
                 b
