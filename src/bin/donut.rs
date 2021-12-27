@@ -93,7 +93,6 @@ async fn new_handler_context(addr: SocketAddr, timeout: Duration) -> DonutResult
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let opts = DonutApplication::parse();
-    let timeout = Duration::from_millis(opts.upstream_timeout);
 
     tracing::subscriber::set_global_default(
         tracing_subscriber::FmtSubscriber::builder()
@@ -102,6 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )
     .expect("Failed to set tracing subscriber");
 
+    let timeout = Duration::from_millis(opts.upstream_timeout);
     let context = Arc::new(new_handler_context(opts.upstream_udp, timeout).await.unwrap());
     let service = make_service_fn(move |_| {
         let context = context.clone();

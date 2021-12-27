@@ -52,8 +52,9 @@ impl UdpResolver {
             target: "donut_dns",
             Level::INFO,
             queries = %queries,
-            results = res.answer_count(),
-            response = u16::from(code),
+            num_queries = res.query_count(),
+            num_answers = res.answer_count(),
+            response_code = u16::from(code),
             response_msg = %code,
         );
 

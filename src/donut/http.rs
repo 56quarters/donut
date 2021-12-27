@@ -127,7 +127,7 @@ fn render_ok(method: &Method, path: &str, accept: &str, meta: ResponseMetadata, 
         path = %path,
         accept = %accept,
         status = 200,
-        bytes = bytes.len(),
+        num_bytes = bytes.len(),
     );
 
     let mut builder = Response::builder().status(StatusCode::OK).header(CONTENT_TYPE, accept);
