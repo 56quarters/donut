@@ -85,7 +85,6 @@ impl ResponseEncoderJson {
         .map_err(|e| DonutError::from((ErrorKind::Internal, "unable to serialize to response", Box::new(e))))?;
 
         event!(
-            target: "donut_encode_json",
             Level::TRACE,
             message = "encoded DNS response to JSON format",
             num_bytes = bytes.len(),
@@ -258,7 +257,6 @@ impl ResponseEncoderWire {
         let bytes = res.to_bytes()?;
 
         event!(
-            target: "donut_encode_wire",
             Level::TRACE,
             message = "encoded DNS response to wire format",
             num_bytes = bytes.len(),

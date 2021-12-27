@@ -49,7 +49,6 @@ impl UdpResolver {
         let code = res.response_code();
 
         event!(
-            target: "donut_dns",
             Level::INFO,
             queries = %queries,
             num_queries = res.query_count(),

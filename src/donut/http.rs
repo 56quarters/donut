@@ -77,33 +77,33 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
             context
                 .json_parser
                 .parse(req)
-                .instrument(span!(Level::DEBUG, "donut::parse::json"))
+                .instrument(span!(Level::DEBUG, "donut_parser_json"))
                 .and_then(|r| context.resolver.resolve(r))
-                .instrument(span!(Level::DEBUG, "donut::resolve::udp"))
+                .instrument(span!(Level::DEBUG, "donut_resolver_udp"))
                 .and_then(|r| context.json_encoder.encode(r))
-                .instrument(span!(Level::DEBUG, "donut::encode::json"))
+                .instrument(span!(Level::DEBUG, "donut_encoder_json"))
                 .await
         }
         (&Method::GET, "/dns-query", WIRE_MESSAGE_FORMAT) => {
             context
                 .get_parser
                 .parse(req)
-                .instrument(span!(Level::DEBUG, "donut::parse::get"))
+                .instrument(span!(Level::DEBUG, "donut_parser_get"))
                 .and_then(|r| context.resolver.resolve(r))
-                .instrument(span!(Level::DEBUG, "donut::resolve::udp"))
+                .instrument(span!(Level::DEBUG, "donut_resolver_udp"))
                 .and_then(|r| context.wire_encoder.encode(r))
-                .instrument(span!(Level::DEBUG, "donut::encode::wire"))
+                .instrument(span!(Level::DEBUG, "donut_encoder_wire"))
                 .await
         }
         (&Method::POST, "/dns-query", WIRE_MESSAGE_FORMAT) => {
             context
                 .post_parser
                 .parse(req)
-                .instrument(span!(Level::DEBUG, "donut::parse::post"))
+                .instrument(span!(Level::DEBUG, "donut_parser_post"))
                 .and_then(|r| context.resolver.resolve(r))
-                .instrument(span!(Level::DEBUG, "donut::resolve::udp"))
+                .instrument(span!(Level::DEBUG, "donut_resolver_udp"))
                 .and_then(|r| context.wire_encoder.encode(r))
-                .instrument(span!(Level::DEBUG, "donut::encode::wire"))
+                .instrument(span!(Level::DEBUG, "donut_encoder_wire"))
                 .await
         }
 
@@ -121,7 +121,6 @@ pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Res
 
 fn render_ok(method: &Method, path: &str, accept: &str, meta: ResponseMetadata, bytes: Vec<u8>) -> Response<Body> {
     event!(
-        target: "donut_http",
         Level::INFO,
         method = %method,
         path = %path,
@@ -150,7 +149,6 @@ fn render_err(method: &Method, path: &str, accept: &str, err: DonutError) -> Res
     };
 
     event!(
-        target: "donut_http",
         Level::ERROR,
         method = %method,
         path = %path,

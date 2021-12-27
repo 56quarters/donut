@@ -63,7 +63,6 @@ impl RequestParserJsonGet {
         message = validate_message(message)?;
 
         event!(
-            target: "donut_parser_json",
             Level::TRACE,
             message = "parsed query params as DNS message",
             message_type = ?message.message_type(),
@@ -132,12 +131,7 @@ impl RequestParserWireGet {
                 }
             })?;
 
-        event!(
-            target: "donut_parser_get",
-            Level::TRACE,
-            message = "parsed base64 bytes",
-            num_bytes = bytes.len(),
-        );
+        event!(Level::TRACE, message = "parsed base64 bytes", num_bytes = bytes.len());
 
         let message = Message::from_vec(&bytes)
             // Any errors while parsing a DNS Message get mapped to invalid input
@@ -149,7 +143,6 @@ impl RequestParserWireGet {
             .and_then(validate_message)?;
 
         event!(
-            target: "donut_parser_get",
             Level::TRACE,
             message = "parsed bytes as DNS message",
             message_type = ?message.message_type(),
@@ -175,15 +168,10 @@ impl RequestParserWirePost {
 
     pub async fn parse(&self, req: Request<Body>) -> DonutResult<DnsRequest> {
         let bytes = Self::read_from_body(req.into_body(), MAX_MESSAGE_SIZE)
-            .instrument(span!(Level::TRACE, "read_from_body"))
+            .instrument(span!(Level::DEBUG, "read_from_body"))
             .await?;
 
-        event!(
-            target: "donut_parser_post",
-            Level::TRACE,
-            message = "parsed body as bytes",
-            num_bytes = bytes.len(),
-        );
+        event!(Level::TRACE, message = "parsed body as bytes", num_bytes = bytes.len());
 
         let message = Message::from_bytes(&bytes)
             // Any errors while parsing a DNS Message get mapped to invalid input
@@ -195,7 +183,6 @@ impl RequestParserWirePost {
             .and_then(validate_message)?;
 
         event!(
-            target: "donut_parser_post",
             Level::TRACE,
             message = "parsed bytes as DNS message",
             message_type = ?message.message_type(),

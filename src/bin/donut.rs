@@ -27,7 +27,7 @@ use hyper::Server;
 use std::net::SocketAddr;
 use std::process;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::net::UdpSocket;
 use tracing::{event, span, Instrument, Level};
 use trust_dns_client::client::AsyncClient;
@@ -101,6 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )
     .expect("Failed to set tracing subscriber");
 
+    let startup = Instant::now();
     let timeout = Duration::from_millis(opts.upstream_timeout);
     let context = Arc::new(new_handler_context(opts.upstream_udp, timeout).await.unwrap());
     let service = make_service_fn(move |_| {
@@ -108,24 +109,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
         async move {
             Ok::<_, hyper::Error>(service_fn(move |req| {
-                http_route(req, context.clone()).instrument(span!(Level::DEBUG, "donut::request"))
+                http_route(req, context.clone()).instrument(span!(Level::DEBUG, "donut_request"))
             }))
         }
     });
 
     let server = Server::try_bind(&opts.bind).unwrap_or_else(|e| {
         event!(
-            target: "donut_server",
             Level::ERROR,
             message = "server failed to start",
             error = %e,
+            upstream = %opts.upstream_udp,
+            address = %opts.bind,
+            timeout_ms = %timeout.as_millis(),
         );
 
         process::exit(1);
     });
 
     event!(
-        target: "donut_server",
         Level::INFO,
         message = "server started",
         upstream = %opts.upstream_udp,
@@ -133,7 +135,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         timeout_ms = %timeout.as_millis(),
     );
 
-    server.serve(service).await?;
+    server
+        .serve(service)
+        .with_graceful_shutdown(async {
+            let _ = tokio::signal::ctrl_c().await;
+        })
+        .await?;
+
+    event!(
+        Level::INFO,
+        message = "server shutdown",
+        runtime_secs = %startup.elapsed().as_secs(),
+    );
 
     Ok(())
 }
