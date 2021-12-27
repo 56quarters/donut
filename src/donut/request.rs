@@ -67,7 +67,7 @@ impl RequestParserJsonGet {
             Level::TRACE,
             message = "parsed query params as DNS message",
             message_type = ?message.message_type(),
-            query_count = message.query_count(),
+            query_count = message.queries().len(),
         );
 
         let meta = DnsRequestOptions {
@@ -153,7 +153,7 @@ impl RequestParserWireGet {
             Level::TRACE,
             message = "parsed bytes as DNS message",
             message_type = ?message.message_type(),
-            query_count = message.query_count(),
+            query_count = message.queries().len(),
         );
 
         let meta = DnsRequestOptions {
@@ -199,7 +199,7 @@ impl RequestParserWirePost {
             Level::TRACE,
             message = "parsed bytes as DNS message",
             message_type = ?message.message_type(),
-            query_count = message.query_count(),
+            query_count = message.queries().len(),
         );
 
         let meta = DnsRequestOptions {
@@ -233,7 +233,11 @@ fn validate_message(message: Message) -> DonutResult<Message> {
         )));
     }
 
-    if message.query_count() == 0 {
+    // NOTE: We use  the queries slice here instead of .query_count() since query counts
+    // are only updated when message is "finalized" right before being sent to the server.
+    // When we build the message piecemeal like for JSON requests, we don't have a "finalized"
+    // message when validating it.
+    if message.queries().is_empty() {
         return Err(DonutError::from((ErrorKind::InputInvalid, "no DNS queries in message")));
     }
 

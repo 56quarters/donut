@@ -16,7 +16,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use clap::{crate_version, value_t, App, Arg, ArgMatches};
+use clap::{crate_version, Parser};
 use donut::http::{http_route, HandlerContext};
 use donut::request::{RequestParserJsonGet, RequestParserWireGet, RequestParserWirePost};
 use donut::resolve::UdpResolver;
@@ -24,7 +24,6 @@ use donut::response::{ResponseEncoderJson, ResponseEncoderWire};
 use donut::types::DonutResult;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
-use std::env;
 use std::net::SocketAddr;
 use std::process;
 use std::sync::Arc;
@@ -34,48 +33,32 @@ use tracing::{event, span, Instrument, Level};
 use trust_dns_client::client::AsyncClient;
 use trust_dns_client::udp::UdpClientStream;
 
-const MAX_TERM_WIDTH: usize = 72;
-
-// Set up the default upstream DNS server. We do this instead of using the
-// `.default_value(...)` methods of clap because we need to mark the various
-// types as conflicting with each other. This isn't possible when using default
-// values. Instead, we create them in an easy to use form here (something that
-// works with `SocketAddr::from()`).
 const DEFAULT_UPSTREAM_UDP: ([u8; 4], u16) = ([127, 0, 0, 1], 53);
+const DEFAULT_UPSTREAM_TIMEOUT_MS: u64 = 1000;
+const DEFAULT_LOG_LEVEL: Level = Level::INFO;
+const DEFAULT_BIND_ADDR: ([u8; 4], u16) = ([127, 0, 0, 1], 3000);
 
-fn parse_cli_opts<'a>(args: Vec<String>) -> ArgMatches<'a> {
-    App::new("Donut DNS over HTTPS server")
-        .version(crate_version!())
-        .set_term_width(MAX_TERM_WIDTH)
-        .about("\nHTTP server for DNS-over-HTTPS lookups (binary and JSON)")
-        .arg(
-            Arg::with_name("upstream-udp")
-                .long("upstream-udp")
-                .takes_value(true)
-                .help("Send DNS queries to this upstream DNS server (via DNS over UDP)."),
-        )
-        .arg(
-            Arg::with_name("upstream-timeout")
-                .long("upstream-timeout")
-                .default_value("1000")
-                .help("Timeout for upstream DNS server in milliseconds."),
-        )
-        .arg(
-            Arg::with_name("log-level")
-                .long("log-level")
-                .default_value("info")
-                .help(concat!(
-                    "Logging verbosity. Allowed values are 'trace', 'debug', 'info', 'warn', ",
-                    "and 'error' -- in decreasing order of verbosity"
-                )),
-        )
-        .arg(
-            Arg::with_name("bind")
-                .long("bind")
-                .default_value("127.0.0.1:3000")
-                .help("Address to bind to."),
-        )
-        .get_matches_from(args)
+/// Donut DNS over HTTPS server
+///
+/// HTTP server for DNS-over-HTTPS lookups (binary and JSON)
+#[derive(Debug, Parser)]
+#[clap(name = "donut", version = crate_version!())]
+struct DonutApplication {
+    /// Send DNS queries to this upstream DNS server (via DNS over UDP)
+    #[clap(long, default_value_t = DEFAULT_UPSTREAM_UDP.into())]
+    upstream_udp: SocketAddr,
+
+    /// Timeout for upstream DNS server in milliseconds.
+    #[clap(long, default_value_t = DEFAULT_UPSTREAM_TIMEOUT_MS)]
+    upstream_timeout: u64,
+
+    /// Logging verbosity. Allowed values are 'trace', 'debug', 'info', 'warn', and 'error'.
+    #[clap(long, default_value_t = DEFAULT_LOG_LEVEL)]
+    log_level: Level,
+
+    /// Address to bind to.
+    #[clap(long, default_value_t = DEFAULT_BIND_ADDR.into())]
+    bind: SocketAddr,
 }
 
 async fn new_udp_dns_client(addr: SocketAddr, timeout: Duration) -> DonutResult<AsyncClient> {
@@ -107,38 +90,19 @@ async fn new_handler_context(addr: SocketAddr, timeout: Duration) -> DonutResult
     ))
 }
 
-fn get_upstream(matches: &ArgMatches<'_>, param: &str) -> Option<Result<SocketAddr, clap::Error>> {
-    match value_t!(matches, param, SocketAddr) {
-        Err(e) if e.kind == clap::ErrorKind::ArgumentNotFound => None,
-        Err(e) => Some(Err(e)),
-        Ok(v) => Some(Ok(v)),
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let args: Vec<String> = env::args().collect();
-    let matches = parse_cli_opts(args);
+    let opts = DonutApplication::parse();
+    let timeout = Duration::from_millis(opts.upstream_timeout);
 
-    let log_level = value_t!(matches, "log-level", Level).unwrap_or_else(|e| e.exit());
     tracing::subscriber::set_global_default(
         tracing_subscriber::FmtSubscriber::builder()
-            .with_max_level(log_level)
+            .with_max_level(opts.log_level)
             .finish(),
     )
     .expect("Failed to set tracing subscriber");
 
-    let upstream = match get_upstream(&matches, "upstream-udp") {
-        Some(Ok(v)) => v,
-        Some(Err(e)) => e.exit(),
-        None => SocketAddr::from(DEFAULT_UPSTREAM_UDP),
-    };
-
-    let timeout = value_t!(matches, "upstream-timeout", u64)
-        .map(Duration::from_millis)
-        .unwrap_or_else(|e| e.exit());
-
-    let context = Arc::new(new_handler_context(upstream, timeout).await.unwrap());
+    let context = Arc::new(new_handler_context(opts.upstream_udp, timeout).await.unwrap());
     let service = make_service_fn(move |_| {
         let context = context.clone();
 
@@ -149,8 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
     });
 
-    let bind_addr = value_t!(matches, "bind", SocketAddr).unwrap_or_else(|e| e.exit());
-    let server = Server::try_bind(&bind_addr).unwrap_or_else(|e| {
+    let server = Server::try_bind(&opts.bind).unwrap_or_else(|e| {
         event!(
             target: "donut_server",
             Level::ERROR,
@@ -165,8 +128,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         target: "donut_server",
         Level::INFO,
         message = "server started",
-        upstream = %upstream,
-        address = %bind_addr,
+        upstream = %opts.upstream_udp,
+        address = %opts.bind,
         timeout_ms = %timeout.as_millis(),
     );
 
