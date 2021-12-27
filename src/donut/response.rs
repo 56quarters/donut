@@ -19,6 +19,7 @@
 use crate::types::{DonutError, DonutResult, ErrorKind};
 use serde::Serialize;
 use std::str;
+use tracing::{event, Level};
 use trust_dns_client::op::DnsResponse;
 use trust_dns_client::proto::serialize::binary::BinEncodable;
 use trust_dns_client::rr::{RData, Record};
@@ -82,6 +83,13 @@ impl ResponseEncoderJson {
             answers,
         ))
         .map_err(|e| DonutError::from((ErrorKind::Internal, "unable to serialize to response", Box::new(e))))?;
+
+        event!(
+            target: "donut_encode_json",
+            Level::TRACE,
+            message = "encoded DNS response to JSON format",
+            num_bytes = bytes.len(),
+        );
 
         Ok((meta, bytes))
     }
@@ -246,6 +254,16 @@ impl ResponseEncoderWire {
     }
 
     pub async fn encode(&self, res: DnsResponse) -> DonutResult<(ResponseMetadata, Vec<u8>)> {
-        Ok((ResponseMetadata::from(&res), res.to_bytes()?))
+        let meta = ResponseMetadata::from(&res);
+        let bytes = res.to_bytes()?;
+
+        event!(
+            target: "donut_encode_wire",
+            Level::TRACE,
+            message = "encoded DNS response to wire format",
+            num_bytes = bytes.len(),
+        );
+
+        Ok((meta, bytes))
     }
 }

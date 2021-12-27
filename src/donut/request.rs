@@ -226,6 +226,7 @@ impl RequestParserWirePost {
 
 /// Perform extra semantic validation of DNS Messages
 fn validate_message(message: Message) -> DonutResult<Message> {
+    // We only parse incoming queries, reject anything else (updates, notifications, responses)
     if message.message_type() != MessageType::Query || message.op_code() != OpCode::Query {
         return Err(DonutError::from((
             ErrorKind::InputInvalid,
