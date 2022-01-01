@@ -1,6 +1,6 @@
 # Donut
 
-[![Build Status](https://travis-ci.org/56quarters/donut.svg?branch=master)](https://travis-ci.org/56quarters/donut)
+[![build status](https://circleci.com/gh/56quarters/donut.svg?style=shield)](https://circleci.com/gh/56quarters/donut)
 [![docs.rs](https://docs.rs/donut/badge.svg)](https://docs.rs/donut/)
 [![crates.io](https://img.shields.io/crates/v/donut.svg)](https://crates.io/crates/donut/)
 
