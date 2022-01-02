@@ -52,7 +52,7 @@ struct DonutApplication {
     #[clap(long, default_value_t = DEFAULT_UPSTREAM_TIMEOUT_MS)]
     upstream_timeout: u64,
 
-    /// Logging verbosity. Allowed values are 'trace', 'debug', 'info', 'warn', and 'error'.
+    /// Logging verbosity. Allowed values are 'trace', 'debug', 'info', 'warn', and 'error' (case insensitive).
     #[clap(long, default_value_t = DEFAULT_LOG_LEVEL)]
     log_level: Level,
 
