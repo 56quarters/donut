@@ -24,6 +24,7 @@ use donut::response::{ResponseEncoderJson, ResponseEncoderWire};
 use donut::types::DonutResult;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
+use std::error::Error;
 use std::net::SocketAddr;
 use std::process;
 use std::sync::Arc;
@@ -91,7 +92,7 @@ async fn new_handler_context(addr: SocketAddr, timeout: Duration) -> DonutResult
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let opts = DonutApplication::parse();
 
     tracing::subscriber::set_global_default(
