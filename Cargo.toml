@@ -7,6 +7,7 @@ homepage = "https://github.com/56quarters/donut"
 repository = "https://github.com/56quarters/donut"
 readme = "README.md"
 license = "GPL-3.0+"
+keywords = ["doh", "dns", "dns-over-https"]
 edition = "2021"
 
 [dependencies]
