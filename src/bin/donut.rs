@@ -16,7 +16,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use clap::{crate_version, Parser};
+use clap::Parser;
 use donut::http::{http_route, HandlerContext};
 use donut::request::{RequestParserJsonGet, RequestParserWireGet, RequestParserWirePost};
 use donut::resolve::UdpResolver;
@@ -25,11 +25,13 @@ use donut::types::DonutResult;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::Server;
 use std::error::Error;
+use std::io;
 use std::net::SocketAddr;
 use std::process;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::net::UdpSocket;
+use tokio::signal::unix::{self, SignalKind};
 use tracing::{event, span, Instrument, Level};
 use trust_dns_client::client::AsyncClient;
 use trust_dns_client::udp::UdpClientStream;
@@ -43,7 +45,7 @@ const DEFAULT_BIND_ADDR: ([u8; 4], u16) = ([127, 0, 0, 1], 3000);
 ///
 /// HTTP server for DNS-over-HTTPS lookups (binary and JSON)
 #[derive(Debug, Parser)]
-#[clap(name = "donut", version = crate_version!())]
+#[clap(name = "donut", version = clap::crate_version!())]
 struct DonutApplication {
     /// Send DNS queries to this upstream DNS server (via DNS over UDP)
     #[clap(long, default_value_t = DEFAULT_UPSTREAM_UDP.into())]
@@ -139,7 +141,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     server
         .serve(service)
         .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
+            // Wait for either SIGTERM or SIGINT to shutdown
+            tokio::select! {
+                _ = sigterm() => {}
+                _ = sigint() => {}
+            }
         })
         .await?;
 
@@ -149,5 +155,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         runtime_secs = %startup.elapsed().as_secs(),
     );
 
+    Ok(())
+}
+
+/// Return after the first SIGTERM signal received by this process
+async fn sigterm() -> io::Result<()> {
+    unix::signal(SignalKind::terminate())?.recv().await;
+    Ok(())
+}
+
+/// Return after the first SIGINT signal received by this process
+async fn sigint() -> io::Result<()> {
+    unix::signal(SignalKind::interrupt())?.recv().await;
     Ok(())
 }
