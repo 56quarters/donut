@@ -16,7 +16,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use clap::{crate_version, Parser};
+use clap::Parser;
 use std::env;
 use std::io::{self, Write};
 use trust_dns_client::op::{Message, Query};
@@ -27,7 +27,7 @@ use trust_dns_client::serialize::binary::BinEncodable;
 ///
 /// Output a DNS request in base64 or binary representation
 #[derive(Debug, Parser)]
-#[clap(name = "donut", version = crate_version!())]
+#[clap(name = "donut", version = clap::crate_version!())]
 struct Dns2BinApplication {
     /// Output raw binary (instead of base64 text)
     #[clap(long = "raw", short = 'r')]

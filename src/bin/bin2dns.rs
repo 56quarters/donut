@@ -16,7 +16,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use clap::{crate_version, Parser};
+use clap::Parser;
 use std::env;
 use std::fmt::Write;
 use std::io::{self, Read};
@@ -27,7 +27,7 @@ use trust_dns_client::rr::Record;
 ///
 /// Convert binary DNS responses on STDIN to a dig-like text format
 #[derive(Debug, Parser)]
-#[clap(name = "donut", version = crate_version!())]
+#[clap(name = "donut", version = clap::crate_version!())]
 struct Bin2DnsApplication;
 
 fn format_question(buf: &mut String, mes: &Message) {
