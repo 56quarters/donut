@@ -17,18 +17,13 @@
 //
 
 use crate::types::{DonutError, DonutResult, ErrorKind};
-use futures_util::{future, TryStreamExt};
-use hyper::{Body, Request};
-use std::collections::HashMap;
-use tracing::{event, span, Instrument, Level};
+use bytes::Bytes;
+use tracing::{event, Level};
 use trust_dns_client::op::{MessageType, OpCode, Query};
 use trust_dns_client::proto::op::Message;
 use trust_dns_client::proto::serialize::binary::BinDecodable;
 use trust_dns_client::proto::xfer::{DnsRequest, DnsRequestOptions};
 use trust_dns_client::rr::{Name, RecordType};
-
-/// Max size for a DNS message in bytes (POST body or GET parameter after decoding)
-const MAX_MESSAGE_SIZE: usize = 512;
 
 #[derive(Debug, Default, Clone)]
 pub struct RequestParserJsonGet;
@@ -38,26 +33,12 @@ impl RequestParserJsonGet {
         RequestParserJsonGet
     }
 
-    pub async fn parse(&self, req: Request<Body>) -> DonutResult<DnsRequest> {
-        let qs = req.uri().query().unwrap_or("").as_bytes();
-        let query = url::form_urlencoded::parse(qs);
-        let params: HashMap<String, String> = query.into_owned().collect();
-
-        let name = params
-            .get("name")
-            .ok_or_else(|| DonutError::from((ErrorKind::InputInvalid, "missing query name")))
-            .and_then(|s| Self::parse_query_name(s))?;
-        let kind = params
-            .get("type")
-            .ok_or_else(|| DonutError::from((ErrorKind::InputInvalid, "missing query type")))
-            .and_then(|s| Self::parse_query_type(s))?;
-        let checking_disabled = params
-            .get("cd")
-            .map(|s| (s == "1" || s.to_lowercase() == "true"))
-            .unwrap_or(false);
+    pub async fn parse(&self, name: String, kind: String, checking_disabled: bool) -> DonutResult<DnsRequest> {
+        let parsed_name = Self::parse_query_name(&name)?;
+        let parsed_kind = Self::parse_query_type(&kind)?;
 
         let mut message = Message::default();
-        message.add_query(Query::query(name, kind));
+        message.add_query(Query::query(parsed_name, parsed_kind));
         message.set_checking_disabled(checking_disabled);
         message.set_recursion_desired(true);
         message = validate_message(message)?;
@@ -108,30 +89,21 @@ impl RequestParserWireGet {
         RequestParserWireGet
     }
 
-    pub async fn parse(&self, req: Request<Body>) -> DonutResult<DnsRequest> {
-        let qs = req.uri().query().unwrap_or("").as_bytes();
-        let query = url::form_urlencoded::parse(qs);
-        let params: HashMap<String, String> = query.into_owned().collect();
-
-        let bytes = params
-            .get("dns")
-            .ok_or_else(|| DonutError::from((ErrorKind::InputInvalid, "missing 'dns' field")))
-            .and_then(|d| {
-                base64::decode_config(d, base64::URL_SAFE_NO_PAD)
-                    .map_err(|e| DonutError::from((ErrorKind::InputInvalid, "invalid base64 value", Box::new(e))))
-            })
+    pub async fn parse(&self, dns: String) -> DonutResult<DnsRequest> {
+        let bytes = base64::decode_config(&dns, base64::URL_SAFE_NO_PAD)
+            .map_err(|e| DonutError::from((ErrorKind::InputInvalid, "invalid base64 value", Box::new(e))))
             .and_then(|b| {
                 // Ensure that size of the request (after base64 decoding) isn't longer
                 // than the max DNS message size that we allow (512 bytes, which matches
                 // the limit for POST requests).
-                if b.len() > MAX_MESSAGE_SIZE {
+                if b.len() > crate::MAX_MESSAGE_SIZE {
                     Err(DonutError::from((ErrorKind::InputUriTooLong, "URI too long")))
                 } else {
                     Ok(b)
                 }
             })?;
 
-        event!(Level::TRACE, message = "parsed base64 bytes", num_bytes = bytes.len());
+        tracing::trace!(message = "parsed base64 bytes", num_bytes = bytes.len());
 
         let message = Message::from_vec(&bytes)
             // Any errors while parsing a DNS Message get mapped to invalid input
@@ -142,8 +114,7 @@ impl RequestParserWireGet {
             })
             .and_then(validate_message)?;
 
-        event!(
-            Level::TRACE,
+        tracing::trace!(
             message = "parsed bytes as DNS message",
             message_type = ?message.message_type(),
             query_count = message.queries().len(),
@@ -166,14 +137,12 @@ impl RequestParserWirePost {
         RequestParserWirePost
     }
 
-    pub async fn parse(&self, req: Request<Body>) -> DonutResult<DnsRequest> {
-        let bytes = Self::read_from_body(req.into_body(), MAX_MESSAGE_SIZE)
-            .instrument(span!(Level::DEBUG, "read_from_body"))
-            .await?;
+    pub async fn parse(&self, bytes: Bytes) -> DonutResult<DnsRequest> {
+        // Assert (and potential panic) here because the length of the request body should have
+        // been validated already by the HTTP layer. If it hasn't, that's a bug in the server.
+        assert!(bytes.len() <= crate::MAX_MESSAGE_SIZE);
 
-        event!(Level::TRACE, message = "parsed body as bytes", num_bytes = bytes.len());
-
-        let message = Message::from_bytes(&bytes)
+        let message = Message::from_bytes(bytes.as_ref())
             // Any errors while parsing a DNS Message get mapped to invalid input
             .map_err(|e| DonutError::from((ErrorKind::InputInvalid, "invalid DNS message", Box::new(e))))
             .map(|mut m| {
@@ -182,8 +151,7 @@ impl RequestParserWirePost {
             })
             .and_then(validate_message)?;
 
-        event!(
-            Level::TRACE,
+        tracing::trace!(
             message = "parsed bytes as DNS message",
             message_type = ?message.message_type(),
             query_count = message.queries().len(),
@@ -195,19 +163,6 @@ impl RequestParserWirePost {
         };
 
         Ok(DnsRequest::new(message, meta))
-    }
-
-    async fn read_from_body(body: Body, n: usize) -> DonutResult<Vec<u8>> {
-        body.map_err(|e| DonutError::from((ErrorKind::Internal, "cannot read HTTP body", Box::new(e))))
-            .try_fold(Vec::new(), |mut acc, chunk| {
-                if chunk.len() + acc.len() > n {
-                    return future::err(DonutError::from((ErrorKind::InputBodyTooLong, "body too long")));
-                }
-
-                acc.extend_from_slice(&*chunk);
-                future::ok(acc)
-            })
-            .await
     }
 }
 
