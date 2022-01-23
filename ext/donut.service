@@ -1,0 +1,20 @@
+[Unit]
+Description=DNS over HTTPS server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/donut
+
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=true
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+RestrictNamespaces=yes
+
+[Install]
+WantedBy=multi-user.target
