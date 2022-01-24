@@ -20,11 +20,15 @@ use crate::request::{RequestParserJsonGet, RequestParserWireGet, RequestParserWi
 use crate::resolve::UdpResolver;
 use crate::response::{ResponseEncoderJson, ResponseEncoderWire, ResponseMetadata};
 use crate::types::{DonutError, ErrorKind};
+use bytes::Bytes;
 use futures_util::TryFutureExt;
-use hyper::header::{ACCEPT, CACHE_CONTROL, CONTENT_TYPE};
-use hyper::{Body, Method, Request, Response, StatusCode};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{event, span, Instrument, Level};
+use tracing::{span, Instrument, Level};
+use warp::http::header::ACCEPT;
+use warp::http::HeaderValue;
+use warp::http::StatusCode;
+use warp::{Filter, Rejection, Reply};
 
 const WIRE_MESSAGE_FORMAT: &str = "application/dns-message";
 const JSON_MESSAGE_FORMAT: &str = "application/dns-json";
@@ -59,108 +63,142 @@ impl HandlerContext {
     }
 }
 
-pub async fn http_route(req: Request<Body>, context: Arc<HandlerContext>) -> Result<Response<Body>, hyper::Error> {
-    // Copy all the request attributes we're matching on so that we can pass ownership
-    // of the request into each parsing method (required for the POST parser since it
-    // reads the body as a stream).
-    let method = req.method().clone();
-    let path = req.uri().path().to_owned();
-    let accept = req
-        .headers()
-        .get(ACCEPT)
-        .and_then(|a| a.to_str().ok())
-        .unwrap_or("")
-        .to_owned();
-
-    let encoded = match (&method, path.as_ref(), accept.as_ref()) {
-        (&Method::GET, "/dns-query", JSON_MESSAGE_FORMAT) => {
-            context
-                .json_parser
-                .parse(req)
-                .instrument(span!(Level::DEBUG, "donut_parser_json"))
-                .and_then(|r| context.resolver.resolve(r))
-                .instrument(span!(Level::DEBUG, "donut_resolver_udp"))
-                .and_then(|r| context.json_encoder.encode(r))
-                .instrument(span!(Level::DEBUG, "donut_encoder_json"))
-                .await
-        }
-        (&Method::GET, "/dns-query", WIRE_MESSAGE_FORMAT) => {
-            context
-                .get_parser
-                .parse(req)
-                .instrument(span!(Level::DEBUG, "donut_parser_get"))
-                .and_then(|r| context.resolver.resolve(r))
-                .instrument(span!(Level::DEBUG, "donut_resolver_udp"))
-                .and_then(|r| context.wire_encoder.encode(r))
-                .instrument(span!(Level::DEBUG, "donut_encoder_wire"))
-                .await
-        }
-        (&Method::POST, "/dns-query", WIRE_MESSAGE_FORMAT) => {
-            context
-                .post_parser
-                .parse(req)
-                .instrument(span!(Level::DEBUG, "donut_parser_post"))
-                .and_then(|r| context.resolver.resolve(r))
-                .instrument(span!(Level::DEBUG, "donut_resolver_udp"))
-                .and_then(|r| context.wire_encoder.encode(r))
-                .instrument(span!(Level::DEBUG, "donut_encoder_wire"))
-                .await
-        }
-
-        // 400 for the correct path but an invalid Accept value
-        (_, "/dns-query", _) => return Ok(http_status_no_body(StatusCode::BAD_REQUEST)),
-
-        // 404 for everything else
-        _ => return Ok(http_status_no_body(StatusCode::NOT_FOUND)),
-    };
-
-    Ok(encoded
-        .map(|(meta, bytes)| render_ok(&method, &path, &accept, meta, bytes))
-        .unwrap_or_else(|e| render_err(&method, &path, &accept, e)))
+#[derive(Debug, Serialize, Deserialize)]
+struct JsonQuery {
+    #[serde(alias = "name")]
+    name: String,
+    #[serde(alias = "type")]
+    kind: String,
+    #[serde(alias = "cd")]
+    checking_disabled: Option<bool>,
 }
 
-fn render_ok(method: &Method, path: &str, accept: &str, meta: ResponseMetadata, bytes: Vec<u8>) -> Response<Body> {
-    event!(
-        Level::INFO,
-        method = %method,
-        path = %path,
-        accept = %accept,
-        status = 200,
-        num_bytes = bytes.len(),
-    );
+#[derive(Debug, Serialize, Deserialize)]
+struct WireGetQuery {
+    #[serde(alias = "dns")]
+    dns: String,
+}
 
-    let mut builder = Response::builder().status(StatusCode::OK).header(CONTENT_TYPE, accept);
-    if method == Method::GET {
-        if let Some(ttl) = meta.min_ttl() {
-            builder = builder.header(CACHE_CONTROL, format!("max-age={}", ttl));
-        }
+#[derive(Debug)]
+struct DnsResponseReply {
+    result: Result<(ResponseMetadata, Vec<u8>), DonutError>,
+    content_type: &'static str,
+}
+
+impl DnsResponseReply {
+    fn new(result: Result<(ResponseMetadata, Vec<u8>), DonutError>, content_type: &'static str) -> Self {
+        DnsResponseReply { result, content_type }
     }
 
-    builder.body(Body::from(bytes)).unwrap()
+    fn success(content_type: &'static str, meta: ResponseMetadata, bytes: Vec<u8>) -> warp::reply::Response {
+        let mut res = warp::http::Response::new(bytes.into());
+        let headers = res.headers_mut();
+
+        headers.insert(warp::http::header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+
+        if let Some(ttl) = meta.min_ttl() {
+            let caching = HeaderValue::from_maybe_shared(format!("max-age={}", ttl)).unwrap();
+            headers.insert(warp::http::header::CACHE_CONTROL, caching);
+        }
+
+        res
+    }
+
+    fn error(content_type: &'static str, err: DonutError) -> warp::reply::Response {
+        let status_code = match err.kind() {
+            ErrorKind::InputInvalid => StatusCode::BAD_REQUEST,
+            ErrorKind::InputBodyTooLong => StatusCode::PAYLOAD_TOO_LARGE,
+            ErrorKind::InputUriTooLong => StatusCode::URI_TOO_LONG,
+            ErrorKind::Timeout => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorKind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+
+        tracing::error!(
+            accept = %content_type,
+            status = status_code.as_u16(),
+            error_kind = ?err.kind(),
+            error_msg = %err,
+        );
+
+        status_code.into_response()
+    }
 }
 
-fn render_err(method: &Method, path: &str, accept: &str, err: DonutError) -> Response<Body> {
-    let status_code = match err.kind() {
-        ErrorKind::InputInvalid => StatusCode::BAD_REQUEST,
-        ErrorKind::InputBodyTooLong => StatusCode::PAYLOAD_TOO_LARGE,
-        ErrorKind::InputUriTooLong => StatusCode::URI_TOO_LONG,
-        ErrorKind::Timeout => StatusCode::SERVICE_UNAVAILABLE,
-        ErrorKind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
-    };
-
-    event!(
-        Level::ERROR,
-        method = %method,
-        path = %path,
-        accept = %accept,
-        status = status_code.as_u16(),
-        error_kind = ?err.kind(),
-        error_msg = %err,
-    );
-
-    http_status_no_body(status_code)
+impl Reply for DnsResponseReply {
+    fn into_response(self) -> warp::reply::Response {
+        match self.result {
+            Ok((meta, bytes)) => Self::success(self.content_type, meta, bytes),
+            Err(e) => Self::error(self.content_type, e),
+        }
+    }
 }
 
-fn http_status_no_body(code: StatusCode) -> Response<Body> {
-    Response::builder().status(code).body(Body::empty()).unwrap()
+pub fn json_get(context: Arc<HandlerContext>) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
+    warp::path("dns-query")
+        .and(warp::filters::method::get())
+        .and(warp::header::exact_ignore_case(ACCEPT.as_str(), JSON_MESSAGE_FORMAT))
+        .and(warp::query::query::<JsonQuery>())
+        .and_then(move |q: JsonQuery| {
+            let context = context.clone();
+            async move {
+                let r = context
+                    .json_parser
+                    .parse(q.name, q.kind, q.checking_disabled.unwrap_or(false))
+                    .instrument(span!(Level::DEBUG, "donut_parser_json"))
+                    .and_then(|r| context.resolver.resolve(r))
+                    .instrument(span!(Level::DEBUG, "donut_resolver_udp"))
+                    .and_then(|r| context.json_encoder.encode(r))
+                    .instrument(span!(Level::DEBUG, "donut_encoder_json"))
+                    .await;
+
+                Ok::<DnsResponseReply, Rejection>(DnsResponseReply::new(r, JSON_MESSAGE_FORMAT))
+            }
+        })
+}
+
+pub fn wire_get(context: Arc<HandlerContext>) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
+    warp::path("dns-query")
+        .and(warp::filters::method::get())
+        .and(warp::header::exact_ignore_case(ACCEPT.as_str(), WIRE_MESSAGE_FORMAT))
+        .and(warp::query::query::<WireGetQuery>())
+        .and_then(move |q: WireGetQuery| {
+            let context = context.clone();
+            async move {
+                let r = context
+                    .get_parser
+                    .parse(q.dns)
+                    .instrument(span!(Level::DEBUG, "donut_parser_get"))
+                    .and_then(|r| context.resolver.resolve(r))
+                    .instrument(span!(Level::DEBUG, "donut_resolver_udp"))
+                    .and_then(|r| context.wire_encoder.encode(r))
+                    .instrument(span!(Level::DEBUG, "donut_encoder_wire"))
+                    .await;
+
+                Ok::<DnsResponseReply, Rejection>(DnsResponseReply::new(r, WIRE_MESSAGE_FORMAT))
+            }
+        })
+}
+
+pub fn wire_post(context: Arc<HandlerContext>) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
+    warp::path("dns-query")
+        .and(warp::filters::method::post())
+        .and(warp::header::exact_ignore_case(ACCEPT.as_str(), WIRE_MESSAGE_FORMAT))
+        .and(warp::body::content_length_limit(crate::MAX_MESSAGE_SIZE as u64))
+        .and(warp::filters::body::bytes())
+        .and_then(move |body: Bytes| {
+            let context = context.clone();
+            async move {
+                let r = context
+                    .post_parser
+                    .parse(body)
+                    .instrument(span!(Level::DEBUG, "donut_parser_post"))
+                    .and_then(|r| context.resolver.resolve(r))
+                    .instrument(span!(Level::DEBUG, "donut_resolver_udp"))
+                    .and_then(|r| context.wire_encoder.encode(r))
+                    .instrument(span!(Level::DEBUG, "donut_encoder_wire"))
+                    .await;
+
+                Ok::<DnsResponseReply, Rejection>(DnsResponseReply::new(r, WIRE_MESSAGE_FORMAT))
+            }
+        })
 }

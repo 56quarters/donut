@@ -18,7 +18,6 @@
 
 use crate::types::DonutResult;
 use std::fmt;
-use tracing::{event, Level};
 use trust_dns_client::client::AsyncClient;
 use trust_dns_client::op::DnsResponse;
 use trust_dns_client::proto::xfer::DnsRequest;
@@ -48,8 +47,7 @@ impl UdpResolver {
         let res = client.send(req).await?;
         let code = res.response_code();
 
-        event!(
-            Level::INFO,
+        tracing::debug!(
             queries = %queries,
             num_queries = res.query_count(),
             num_answers = res.answer_count(),

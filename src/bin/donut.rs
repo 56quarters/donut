@@ -17,24 +17,23 @@
 //
 
 use clap::Parser;
-use donut::http::{http_route, HandlerContext};
+use donut::http::HandlerContext;
 use donut::request::{RequestParserJsonGet, RequestParserWireGet, RequestParserWirePost};
 use donut::resolve::UdpResolver;
 use donut::response::{ResponseEncoderJson, ResponseEncoderWire};
 use donut::types::DonutResult;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::Server;
 use std::error::Error;
 use std::io;
 use std::net::SocketAddr;
 use std::process;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::signal::unix::{self, SignalKind};
-use tracing::{event, span, Instrument, Level};
+use tracing::Level;
 use trust_dns_client::client::AsyncClient;
 use trust_dns_client::udp::UdpClientStream;
+use warp::Filter;
 
 const DEFAULT_UPSTREAM_UDP: ([u8; 4], u16) = ([127, 0, 0, 1], 53);
 const DEFAULT_UPSTREAM_TIMEOUT_MS: u64 = 1000;
@@ -104,57 +103,30 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     )
     .expect("Failed to set tracing subscriber");
 
-    let startup = Instant::now();
     let timeout = Duration::from_millis(opts.upstream_timeout);
     let context = Arc::new(new_handler_context(opts.upstream_udp, timeout).await.unwrap());
-    let service = make_service_fn(move |_| {
-        let context = context.clone();
 
-        async move {
-            Ok::<_, hyper::Error>(service_fn(move |req| {
-                http_route(req, context.clone()).instrument(span!(Level::DEBUG, "donut_request"))
-            }))
-        }
-    });
+    let handler = donut::http::json_get(context.clone())
+        .or(donut::http::wire_get(context.clone()))
+        .or(donut::http::wire_post(context.clone()));
 
-    let server = Server::try_bind(&opts.bind).unwrap_or_else(|e| {
-        event!(
-            Level::ERROR,
-            message = "server failed to start",
-            error = %e,
-            upstream = %opts.upstream_udp,
-            address = %opts.bind,
-            timeout_ms = %timeout.as_millis(),
-        );
-
-        process::exit(1);
-    });
-
-    event!(
-        Level::INFO,
-        message = "server started",
-        upstream = %opts.upstream_udp,
-        address = %opts.bind,
-        timeout_ms = %timeout.as_millis(),
-    );
-
-    server
-        .serve(service)
-        .with_graceful_shutdown(async {
+    let (sock, server) = warp::serve(handler)
+        .try_bind_with_graceful_shutdown(opts.bind, async {
             // Wait for either SIGTERM or SIGINT to shutdown
             tokio::select! {
                 _ = sigterm() => {}
                 _ = sigint() => {}
             }
         })
-        .await?;
+        .unwrap_or_else(|e| {
+            tracing::error!(message = "error binding to address", address = %opts.bind, error = %e);
+            process::exit(1)
+        });
 
-    event!(
-        Level::INFO,
-        message = "server shutdown",
-        runtime_secs = %startup.elapsed().as_secs(),
-    );
+    tracing::info!(message = "server started", address = %sock);
+    server.await;
 
+    tracing::info!("server shutdown");
     Ok(())
 }
 

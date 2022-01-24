@@ -16,6 +16,9 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+/// Max size for a DNS message in bytes (POST body or GET parameter after decoding)
+pub const MAX_MESSAGE_SIZE: usize = 512;
+
 pub mod http;
 pub mod request;
 pub mod resolve;
