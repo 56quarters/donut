@@ -16,12 +16,14 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-use crate::types::{DonutError, DonutResult, ErrorKind};
-use serde::Serialize;
 use std::str;
+
+use serde::Serialize;
 use trust_dns_client::op::DnsResponse;
 use trust_dns_client::proto::serialize::binary::BinEncodable;
 use trust_dns_client::rr::{RData, Record};
+
+use crate::types::{DonutError, DonutResult, ErrorKind};
 
 #[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub struct ResponseMetadata {
@@ -50,6 +52,8 @@ impl ResponseEncoderJson {
     }
 
     pub async fn encode(&self, res: DnsResponse) -> DonutResult<(ResponseMetadata, Vec<u8>)> {
+        tracing::trace!(response = ?res);
+
         let questions: Vec<JsonQuestion> = res
             .queries()
             .iter()
@@ -83,7 +87,7 @@ impl ResponseEncoderJson {
         ))
         .map_err(|e| DonutError::from((ErrorKind::Internal, "unable to serialize to response", Box::new(e))))?;
 
-        tracing::trace!(message = "encoded DNS response to JSON format", num_bytes = bytes.len());
+        tracing::debug!(message = "encoded DNS result to JSON format", num_bytes = bytes.len());
         Ok((meta, bytes))
     }
 }
@@ -247,10 +251,12 @@ impl ResponseEncoderWire {
     }
 
     pub async fn encode(&self, res: DnsResponse) -> DonutResult<(ResponseMetadata, Vec<u8>)> {
+        tracing::trace!(response = ?res);
+
         let meta = ResponseMetadata::from(&res);
         let bytes = res.to_bytes()?;
 
-        tracing::trace!(message = "encoded DNS response to wire format", num_bytes = bytes.len());
+        tracing::debug!(message = "encoded DNS result to wire format", num_bytes = bytes.len());
         Ok((meta, bytes))
     }
 }

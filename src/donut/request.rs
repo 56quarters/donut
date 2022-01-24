@@ -18,7 +18,6 @@
 
 use crate::types::{DonutError, DonutResult, ErrorKind};
 use bytes::Bytes;
-use tracing::{event, Level};
 use trust_dns_client::op::{MessageType, OpCode, Query};
 use trust_dns_client::proto::op::Message;
 use trust_dns_client::proto::serialize::binary::BinDecodable;
@@ -43,13 +42,7 @@ impl RequestParserJsonGet {
         message.set_recursion_desired(true);
         message = validate_message(message)?;
 
-        event!(
-            Level::TRACE,
-            message = "parsed query params as DNS message",
-            message_type = ?message.message_type(),
-            query_count = message.queries().len(),
-        );
-
+        tracing::trace!(request = ?message);
         let meta = DnsRequestOptions {
             expects_multiple_responses: message.query_count() > 1,
             ..Default::default()
@@ -114,12 +107,7 @@ impl RequestParserWireGet {
             })
             .and_then(validate_message)?;
 
-        tracing::trace!(
-            message = "parsed bytes as DNS message",
-            message_type = ?message.message_type(),
-            query_count = message.queries().len(),
-        );
-
+        tracing::trace!(request = ?message);
         let meta = DnsRequestOptions {
             expects_multiple_responses: message.query_count() > 1,
             ..Default::default()
@@ -151,12 +139,7 @@ impl RequestParserWirePost {
             })
             .and_then(validate_message)?;
 
-        tracing::trace!(
-            message = "parsed bytes as DNS message",
-            message_type = ?message.message_type(),
-            query_count = message.queries().len(),
-        );
-
+        tracing::trace!(request = ?message);
         let meta = DnsRequestOptions {
             expects_multiple_responses: message.query_count() > 1,
             ..Default::default()
