@@ -26,8 +26,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{span, Instrument, Level};
 use warp::http::header::ACCEPT;
-use warp::http::HeaderValue;
-use warp::http::StatusCode;
+use warp::http::{HeaderValue, StatusCode};
 use warp::{Filter, Rejection, Reply};
 
 const WIRE_MESSAGE_FORMAT: &str = "application/dns-message";
@@ -201,4 +200,8 @@ pub fn wire_post(context: Arc<HandlerContext>) -> impl Filter<Extract = impl Rep
                 Ok::<DnsResponseReply, Rejection>(DnsResponseReply::new(r, WIRE_MESSAGE_FORMAT))
             }
         })
+}
+
+pub fn fallback() -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
+    warp::path("dns-query").map(|| StatusCode::BAD_REQUEST.into_response())
 }
