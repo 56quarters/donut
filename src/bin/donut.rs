@@ -108,7 +108,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let handler = donut::http::json_get(context.clone())
         .or(donut::http::wire_get(context.clone()))
-        .or(donut::http::wire_post(context.clone()));
+        .or(donut::http::wire_post(context.clone()))
+        .or(donut::http::fallback());
 
     let (sock, server) = warp::serve(handler)
         .try_bind_with_graceful_shutdown(opts.bind, async {
