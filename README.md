@@ -1,6 +1,6 @@
 # Donut
 
-[![build status](https://circleci.com/gh/56quarters/donut.svg?style=shield)](https://circleci.com/gh/56quarters/donut)
+![build status](https://github.com/56quarters/donut/actions/workflows/rust.yml/badge.svg)
 [![docs.rs](https://docs.rs/donut/badge.svg)](https://docs.rs/donut/)
 [![crates.io](https://img.shields.io/crates/v/donut.svg)](https://crates.io/crates/donut/)
 
